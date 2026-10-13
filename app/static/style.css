@@ -1,0 +1,64 @@
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #213b32; background: #f5f3eb; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: wait; opacity: .55; }
+button, a, textarea { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid #b46132; outline-offset: 4px; }
+.shell { max-width: 900px; margin: auto; padding: 32px 32px 24px; }
+.masthead { display: flex; align-items: center; justify-content: space-between; padding-bottom: 22px; border-bottom: 1px solid #d8dcd0; }
+.brand { font-size: 35px; font-weight: 800; letter-spacing: -2px; text-decoration: none; color: inherit; }
+.brand span { color: #e37f4f; font-size: 13px; margin-left: 3px; }
+.edition, .eyebrow { font-size: 10px; letter-spacing: 1.7px; font-weight: 650; }
+.edition { color: #596c61; }
+.intro { padding: 33px 0 26px; }
+.eyebrow { color: #64745a; margin: 0 0 14px; }
+h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: clamp(44px, 6vw, 61px); letter-spacing: -2px; line-height: 1.04; margin: 0 0 16px; }
+.description { color: #626e65; font-size: 14px; line-height: 1.6; max-width: 420px; margin: 0; }
+.chat-card { background: #fffefa; border: 1px solid #d8dcd0; border-radius: 18px; box-shadow: 0 8px 28px #233c3106; overflow: hidden; }
+.chat-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 24px; border-bottom: 1px solid #eceee5; }
+.assistant-identity { display: flex; align-items: center; gap: 11px; }
+.avatar { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: #dce5c8; font-family: Georgia, serif; font-size: 26px; }
+strong { font-size: 13px; font-weight: 650; }
+.caption { display: block; font-size: 11px; color: #6a766b; margin-top: 4px; }
+.text-button { background: transparent; border: none; padding: 10px 0 10px 10px; color: #5a6b60; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.messages { height: 240px; overflow-y: auto; padding: 22px 24px 12px; }
+.message { max-width: 85%; margin: 0 0 20px; }
+.speaker { font-size: 9px; letter-spacing: 1.2px; color: #637265; margin: 0 0 7px; font-weight: 650; }
+.bubble { border-radius: 0 12px 12px 12px; background: #f0f3e9; padding: 13px 16px; font-size: 14px; line-height: 1.55; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.user { margin-left: auto; }
+.user .speaker { text-align: right; }
+.user .bubble { background: #244b3a; color: #fff; border-radius: 12px 0 12px 12px; }
+.suggestions { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 24px 18px; }
+.suggestions button { border: 1px solid #dce1d5; border-radius: 8px; background: transparent; color: #4d6050; padding: 9px 11px; font-size: 11px; }
+.suggestions span { margin-left: 12px; }
+.suggestions button:hover { background: #f0f3e9; }
+form { padding: 0 24px 16px; }
+.composer { display: flex; align-items: center; padding: 9px; border: 1px solid #c5cfc0; border-radius: 11px; background: #fff; }
+.composer:focus-within { border-color: #37664b; box-shadow: 0 0 0 2px #37664b12; }
+textarea { background: transparent; resize: vertical; border: none; padding: 9px; min-width: 0; flex: 1; min-height: 50px; max-height: 160px; font-size: 14px; line-height: 1.5; color: #213b32; }
+textarea:focus { outline: none; }
+textarea::placeholder { color: #748172; }
+#send { background: #244b3a; border: 0; border-radius: 8px; padding: 12px 16px; color: white; font-size: 12px; margin-left: 8px; }
+#send span { margin-left: 13px; }
+#send:hover { background: #183c2b; }
+.composer-footer { display: flex; justify-content: space-between; gap: 10px; padding-top: 10px; color: #657060; font-size: 10px; line-height: 1.5; }
+#status { text-align: right; }
+#error { background: #fff0e5; color: #8c3820; font-size: 12px; line-height: 1.5; padding: 10px 12px; border-radius: 6px; margin-bottom: 0; }
+footer { display: flex; gap: 11px; padding: 18px 3px 0; align-items: flex-start; color: #687363; }
+footer p { font-size: 11px; line-height: 1.7; margin: 0; }
+.footnote-mark { color: #74835f; font-size: 21px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (max-width: 560px) {
+  .shell { padding: 20px 16px; }
+  .edition { font-size: 8px; letter-spacing: 1px; }
+  .intro { padding-top: 28px; }
+  .chat-header { padding: 16px; }
+  .messages { padding: 18px 16px 10px; height: 245px; }
+  .message { max-width: 94%; }
+  .suggestions { padding: 0 16px 14px; }
+  form { padding: 0 16px 16px; }
+  textarea { font-size: 16px; }
+  .caption { font-size: 10px; }
+}

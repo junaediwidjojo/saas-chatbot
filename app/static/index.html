@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>SaaS — Support assistant</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/chat.js" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <a class="brand" href="/" aria-label="SaaS chatbot home">saas<span>●</span></a>
+        <span class="edition">THE LEARNING SERIES / 01</span>
+      </header>
+
+      <section class="intro" aria-labelledby="title">
+        <p class="eyebrow">A LITTLE HELP, RIGHT HERE</p>
+        <h1 id="title">Hello. How can<br>we help?</h1>
+        <p class="description">Meet your SaaS support assistant. Start with a question and let’s take it from there.</p>
+      </section>
+
+      <section class="chat-card" aria-label="Chat with support">
+        <div class="chat-header">
+          <div class="assistant-identity"><span class="avatar" aria-hidden="true">s.</span><div><strong>Support assistant</strong><span class="caption">Your first conversation starts here</span></div></div>
+          <button id="clear" class="text-button" type="button">Clear chat</button>
+        </div>
+        <div id="messages" class="messages" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions">
+          <article class="message assistant"><p class="speaker">ASSISTANT</p><p class="bubble">Hi there! I’m the SaaS support assistant. What would you like to know?</p></article>
+        </div>
+        <div class="suggestions" aria-label="Example questions">
+          <button type="button" data-question="What can you help me with?">What can you help with? <span aria-hidden="true">↗</span></button>
+          <button type="button" data-question="What is your return policy?">Ask about returns <span aria-hidden="true">↗</span></button>
+        </div>
+        <form id="chat-form">
+          <label class="sr-only" for="message">Your message</label>
+          <div class="composer">
+            <textarea id="message" name="message" rows="2" maxlength="4000" required placeholder="Type your question…" aria-describedby="input-hint"></textarea>
+            <button id="send" type="submit">Send <span aria-hidden="true">↑</span></button>
+          </div>
+          <div class="composer-footer"><span id="input-hint">Enter to send · Shift + Enter for a new line</span><span id="status" role="status">Checking connection…</span></div>
+          <p id="error" role="alert" hidden></p>
+        </form>
+      </section>
+
+      <footer><span class="footnote-mark" aria-hidden="true">✳</span><p>A work in progress, by design. Store policies and order lookup aren’t connected yet.<br>Each question stands alone. Messages disappear when you refresh.</p></footer>
+    </main>
+  </body>
+</html>
