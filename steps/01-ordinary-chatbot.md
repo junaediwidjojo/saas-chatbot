@@ -41,9 +41,9 @@ No retrieval, database, agent framework, persistent memory, or company-policy cl
 
 Implemented on 2026-09-25.
 
-- Stack: Python 3.14.6, FastAPI, Uvicorn, plain browser JavaScript, OpenAI Responses API, and pip with pinned dependencies. The model is configurable through `.env`.
-- Run: follow the exact setup commands in [README](../README.md), then run `python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`.
-- Verification: 18 backend tests pass; dependency consistency and JavaScript syntax checks pass. Tests use the actual SDK with a simulated HTTP transport and make no paid calls.
+- Stack: Python 3.14.6, FastAPI, Uvicorn, plain browser JavaScript, Fireworks Chat Completions or OpenAI Responses API, and pip with pinned dependencies. The model is configurable through `.env`.
+- Run: follow the exact setup commands in [README](../README.md), then run `.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`.
+- Verification: 36 backend tests pass across OpenAI and Fireworks; dependency consistency and JavaScript syntax checks pass. Tests use the actual SDK with a simulated HTTP transport and make no paid calls.
 - Browser: verified missing-key feedback, restored draft after failure, and a successful simulated-provider round trip. Model output containing HTML markup remains plain text.
 - Baselines: [questions, observed checks, and live-run worksheet](01-baseline.md).
 - Limitation: no API key was configured during implementation. No real model output or factual accuracy is claimed. The remaining completion checkbox intentionally stays open.

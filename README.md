@@ -12,29 +12,41 @@ Step 01 is implemented with Python, FastAPI, a plain HTML/CSS/JavaScript fronten
 4. Verify its completion criteria, record commands and decisions, and update the table below.
 5. Wait for your request before starting the next step.
 
-The backend uses Python with FastAPI and pip. The frontend is served by the same backend, so no Node build or separate frontend server is required. LLM requests use the OpenAI Responses API directly. Use fictional customer data throughout the learning project.
+The backend uses Python with FastAPI and pip. The frontend is served by the same backend, so no Node build or separate frontend server is required. LLM requests use the OpenAI SDK: Fireworks Chat Completions for DeepSeek, or the OpenAI Responses API when OpenAI is selected. Use fictional customer data throughout the learning project.
 
 ## Run locally
 
-Python 3.11+ is required; this build was verified with Python 3.14.6.
+Python 3.11+ is required; this build was verified with Python 3.14.6. On this Mac, use Homebrew's Python explicitly: Xcode's Python is 3.9 and cannot install the pinned dependencies.
 
 ```sh
 cd /Users/junaediwidjojo/HobbyProjects/saas-chatbot
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements-lock.txt
+/opt/homebrew/bin/python3.14 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements-lock.txt
 cp -n .env.example .env
 ```
 
-Edit `.env` locally and replace `your-api-key-here` with your OpenAI API key. Do not paste the key into chat or frontend files. Set `OPENAI_MODEL` to a Responses API model your API project can access; the example uses `gpt-6-astra` from the official quickstart. A Codex or ChatGPT sign-in does not configure this application's API key.
+Edit `.env` locally and configure Fireworks with DeepSeek-V4.1-Flash:
+
+```dotenv
+LLM_PROVIDER=fireworks
+FIREWORKS_API_KEY=your-api-key-here
+FIREWORKS_MODEL=accounts/fireworks/models/deepseek-v4p1-flash
+```
+
+Replace `your-api-key-here` with a key from [Fireworks API Keys](https://app.fireworks.ai/settings/users/api-keys). Keep the key in `.env`, which Git ignores. The backend sends requests to `https://api.fireworks.ai/inference/v1/chat/completions`; no additional SDK is required. Thinking is disabled (`reasoning_effort="none"`) so the 2,048-token budget is used for the final answer.
+
+`cp -n` preserves an existing `.env`, so update its values manually if needed. To use OpenAI instead, set `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, and `OPENAI_MODEL` to a Responses API model you can access. A Codex or ChatGPT sign-in does not configure this application's API key.
 
 ```sh
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Open [the chatbot](http://127.0.0.1:8000). API documentation is at [localhost:8000/docs](http://127.0.0.1:8000/docs). Restart the server after changing `.env`; a shell environment variable takes precedence over the file. Stop the server with Ctrl+C.
 
-Without a key, the interface still loads and shows a setup message. Once configured, each Send calls OpenAI and may incur API usage charges. This is a local learning app, with no authentication or deployment setup.
+These commands do not require activation. Using `.venv/bin/python` directly avoids a shell alias or function sending `python` to Xcode's interpreter even when the prompt shows `(.venv)`. For another machine, replace `/opt/homebrew/bin/python3.14` with the path to an installed Python 3.11+ interpreter. Check the environment with `.venv/bin/python --version` and `.venv/bin/python -m pip --version`; pip's path should be inside `.venv`.
+
+Without a key, the interface still loads and shows a setup message. Once configured, each Send calls your selected provider and may incur API usage charges. This is a local learning app, with no authentication or deployment setup.
 
 `requirements.txt` pins direct runtime dependencies, `requirements-dev.txt` adds test dependencies, and `requirements-lock.txt` records the full tested environment. The setup above installs the full lock, including tests.
 
@@ -61,7 +73,7 @@ Browser (chat.js)
   → POST /chat with {"message": "..."}
   → FastAPI validates the message
   → OpenAI SDK sends instructions + a user message
-  → Backend reads output_text
+  → Backend reads the final answer text
   → Browser displays {"answer": "..."} as plain text
 ```
 
@@ -72,17 +84,16 @@ Browser (chat.js)
 - **Prompt design:** changing the instructions changes behavior, but cannot supply facts the application does not have.
 - **Conversation history:** follow-up references such as “it” may fail because prior messages are absent. We add durable memory in step 10.
 
-The endpoint's `ChatResponse` is just an HTTP response shape. It does not request structured model output; that remains step 02. No temperature setting, retrieval, tools, or agent framework is added in this step.
+The endpoint's `ChatResponse` is just an HTTP response shape. It does not request structured model output; that remains step 02. No temperature setting, retrieval, tools, or agent framework is added in this step. Fireworks requests disable reasoning for this simple baseline.
 
 ## Verify
 
 ```sh
-source .venv/bin/activate
-python -m pytest -q
-python -m pip check
+.venv/bin/python -m pytest -q
+.venv/bin/python -m pip check
 ```
 
-The 18 backend cases exercise the real OpenAI SDK with simulated HTTP responses. They make no paid calls and ignore your `.env` and API key. Coverage includes single-turn payloads, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, and private-file access.
+The 36 backend cases exercise the real OpenAI SDK with simulated HTTP responses. They cover both provider paths, make no paid calls and ignore your `.env` and API key. Coverage includes single-turn payloads, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, and private-file access.
 
 Browser verification covered the missing-key message and retry behavior, and a full send/receive round trip against a temporary simulated provider. This verifies plumbing, not model quality. Record real model observations using [the baseline checklist](steps/01-baseline.md) after configuring your key.
 
@@ -94,7 +105,7 @@ Browser verification covered the missing-key message and retry behavior, and a f
 - `app/static/style.css` — responsive layout and visual styling.
 - `tests/test_chat.py` — isolated SDK and API checks.
 
-Official references: [OpenAI quickstart](https://developers.openai.com/api/docs/quickstart) and [text generation](https://developers.openai.com/api/docs/guides/text).
+Official references: [Fireworks OpenAI compatibility](https://docs.fireworks.ai/tools-sdks/openai-compatibility), [DeepSeek V4.1 Flash on Fireworks](https://fireworks.ai/models/deepseek-ai/deepseek-v4p1-flash), [OpenAI quickstart](https://developers.openai.com/api/docs/quickstart) and [text generation](https://developers.openai.com/api/docs/guides/text).
 
 ## Progress
 

@@ -101,7 +101,7 @@ async function checkConfiguration() {
     const health = await response.json();
     idleStatus = health.configured ? 'Ready for a question' : 'Setup needed';
     if (!health.configured) {
-      error.textContent = 'Add OPENAI_API_KEY to your .env file and restart the server to begin.';
+      error.textContent = 'Add your provider API key to .env and restart the server to begin.';
       error.hidden = false;
     }
   } catch {
