@@ -1,5 +1,7 @@
-"""Step 01: browser → FastAPI → configured model provider → browser."""
+"""Step 02: request structured output, validate it, and bound recovery."""
 
+import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,21 +20,37 @@ from openai import (
     AuthenticationError,
     RateLimitError,
 )
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
+
+from app.schemas import ASSISTANT_JSON_SCHEMA, AssistantResponse, fallback_response
 
 ROOT = Path(__file__).resolve().parent.parent
 FIREWORKS_MODEL = "accounts/fireworks/models/deepseek-v4p1-flash"
-SYSTEM_PROMPT = (
-    "You are the customer support assistant for a fictional SaaS company. "
-    "Be friendly and concise. You do not have store policies or order data yet; "
-    "say when you cannot answer rather than inventing those details."
-)
+MAX_OUTPUT_ATTEMPTS = 2
+
+
+def load_system_prompt() -> str:
+    rules = (ROOT / "prompts" / "support-v1.txt").read_text()
+    configured_path = os.getenv("SAAS_KNOWLEDGE_FILE", "").strip()
+    if configured_path:
+        knowledge_path = Path(configured_path).expanduser()
+        if not knowledge_path.is_absolute():
+            knowledge_path = ROOT / knowledge_path
+        if not knowledge_path.is_file():
+            raise FileNotFoundError("SAAS_KNOWLEDGE_FILE must point to an existing knowledge file.")
+    else:
+        knowledge_path = ROOT / "knowledge" / "mock-saas.md"
+        if not knowledge_path.is_file():
+            knowledge_path = ROOT / "knowledge" / "mock-saas.example.md"
+    knowledge = knowledge_path.read_text()
+    return f"{rules}\n\nMOCK KNOWLEDGE:\n{knowledge}\n\nJSON SCHEMA:\n{json.dumps(ASSISTANT_JSON_SCHEMA)}"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Resolve .env relative to the project, without replacing shell environment values.
     load_dotenv(ROOT / ".env", override=False)
+    app.state.system_prompt = load_system_prompt()
     app.state.provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
     if app.state.provider not in {"openai", "fireworks"}:
         raise ValueError("LLM_PROVIDER must be openai or fireworks.")
@@ -63,10 +81,6 @@ class ChatRequest(BaseModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
 
 
-class ChatResponse(BaseModel):
-    answer: str
-
-
 @app.exception_handler(RequestValidationError)
 async def invalid_request(_request: Request, _error: RequestValidationError):
     # Do not echo user input or internal validation details into error responses.
@@ -87,7 +101,65 @@ async def health(request: Request):
     return {"status": "ok", "configured": request.app.state.openai is not None}
 
 
-@app.post("/chat", response_model=ChatResponse)
+async def generate_reply(state, message: str, attempt: int) -> AssistantResponse | None:
+    instructions = state.system_prompt
+    if attempt:
+        # Do not echo malformed model output or private validation diagnostics.
+        instructions += "\nThe previous generation was invalid or incomplete. Return a complete JSON object matching the schema and escalation rules."
+    if state.provider == "fireworks":
+        response = await state.openai.chat.completions.create(
+            model=state.model,
+            messages=[
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": message},
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "AssistantResponse", "schema": ASSISTANT_JSON_SCHEMA, "strict": True},
+            },
+            max_tokens=2048,
+            reasoning_effort="none",
+        )
+        if not response.choices:
+            return None
+        choice = response.choices[0]
+        refusal = choice.message.refusal or choice.finish_reason == "content_filter"
+        completed = choice.finish_reason == "stop"
+        text = choice.message.content
+    else:
+        response = await state.openai.responses.create(
+            model=state.model,
+            instructions=instructions,
+            input=[{"role": "user", "content": message}],
+            text={"format": {
+                "type": "json_schema", "name": "AssistantResponse",
+                "schema": ASSISTANT_JSON_SCHEMA, "strict": True,
+            }},
+            max_output_tokens=2048,
+            store=False,
+        )
+        refusal = any(
+            content.type == "refusal"
+            for item in response.output if item.type == "message"
+            for content in item.content
+        )
+        completed = response.status == "completed"
+        text = response.output_text
+    if refusal:
+        return AssistantResponse(
+            intent="refusal",
+            answer="I can’t help with that request. Please contact human support for a safe alternative. No action has been taken.",
+            requires_human=True,
+        )
+    if not completed or not isinstance(text, str):
+        return None
+    try:
+        return AssistantResponse.model_validate_json(text)
+    except ValidationError:
+        return None
+
+
+@app.post("/chat", response_model=AssistantResponse)
 async def chat(body: ChatRequest, request: Request):
     client = request.app.state.openai
     if client is None:
@@ -97,30 +169,14 @@ async def chat(body: ChatRequest, request: Request):
         )
 
     try:
-        if request.app.state.provider == "fireworks":
-            response = await client.chat.completions.create(
-                model=request.app.state.model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": body.message},
-                ],
-                max_tokens=2048,
-                # Keep the output budget for the final answer in this baseline app.
-                reasoning_effort="none",
-            )
-            completed = bool(response.choices) and response.choices[0].finish_reason == "stop"
-            answer = (response.choices[0].message.content or "").strip() if response.choices else ""
-        else:
-            response = await client.responses.create(
-                model=request.app.state.model,
-                instructions=SYSTEM_PROMPT,
-                input=[{"role": "user", "content": body.message}],
-                max_output_tokens=2048,
-                store=False,
-            )
-            completed = response.status == "completed"
-            answer = response.output_text.strip()
-    except APITimeoutError:
+        # The original 30-second budget covers both attempts, not 30s per attempt.
+        async with asyncio.timeout(30):
+            for attempt in range(MAX_OUTPUT_ATTEMPTS):
+                reply = await generate_reply(request.app.state, body.message, attempt)
+                if reply is not None:
+                    return reply
+        return fallback_response()
+    except (APITimeoutError, TimeoutError):
         raise HTTPException(504, "The AI took too long to respond. Please try again.") from None
     except AuthenticationError:
         raise HTTPException(503, "The API key was rejected. Check .env and restart the server.") from None
@@ -130,9 +186,3 @@ async def chat(body: ChatRequest, request: Request):
         raise HTTPException(502, "Cannot reach the AI service. Check your connection and try again.") from None
     except APIError:
         raise HTTPException(502, "The AI request failed. Check model access and API configuration, then retry.") from None
-
-    if not completed:
-        raise HTTPException(502, "The AI could not finish its reply. Please try a shorter question.")
-    if not answer:
-        raise HTTPException(502, "The AI returned no text. Please rephrase your question.")
-    return ChatResponse(answer=answer)

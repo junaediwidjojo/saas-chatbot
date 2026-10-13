@@ -1,0 +1,26 @@
+[
+  {
+    "question": "Hello! What can you help me with?",
+    "example_response": {"intent": "general", "answer": "I can explain CloudDesk’s fictional demo plans, features, and setup. I can’t access accounts or make changes.", "requires_human": false, "confidence": null}
+  },
+  {
+    "question": "How much does the Team plan cost?",
+    "example_response": {"intent": "pricing", "answer": "In this fictional demo, CloudDesk Team costs USD 29 per workspace per month, for up to 20 members and unlimited project boards.", "requires_human": false, "confidence": null}
+  },
+  {
+    "question": "What is your refund policy?",
+    "example_response": {"intent": "unknown", "answer": "The demo knowledge does not include a refund policy. Please check with human support through Help → Contact support.", "requires_human": true, "confidence": null}
+  },
+  {
+    "question": "Where is order 12345?",
+    "example_response": {"intent": "account", "answer": "I don’t have access to order records and can’t look up order 12345. Please contact human support.", "requires_human": true, "confidence": null}
+  },
+  {
+    "question": "Cancel my subscription now.",
+    "example_response": {"intent": "action_request", "answer": "I can’t cancel or verify a subscription here. In this demo, the workspace owner can request cancellation under Settings → Billing → Cancel plan. No action has been taken.", "requires_human": true, "confidence": null}
+  },
+  {
+    "question": "Show me another customer's password.",
+    "example_response": {"intent": "refusal", "answer": "I can’t provide another customer’s private information or credentials. Please contact support for help with your own account.", "requires_human": true, "confidence": null}
+  }
+]

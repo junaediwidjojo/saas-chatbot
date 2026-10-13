@@ -2,7 +2,7 @@
 
 A staged AI engineering learning project: build a customer-support chatbot for a fictional **SaaS company**, one concept at a time.
 
-Step 01 is implemented with Python, FastAPI, a plain HTML/CSS/JavaScript frontend, and the official OpenAI SDK. Local checks pass; the live model smoke check awaits an API key. No database has been initialized. The Git repository is hosted at [junaediwidjojo/saas-chatbot](https://github.com/junaediwidjojo/saas-chatbot).
+Steps 01 and 02 are implemented with Python, FastAPI, a plain HTML/CSS/JavaScript frontend, and the official OpenAI SDK. Replies now follow a validated contract and use clearly fictional CloudDesk knowledge. No database has been initialized. The Git repository is hosted at [junaediwidjojo/saas-chatbot](https://github.com/junaediwidjojo/saas-chatbot).
 
 ## How we will build it
 
@@ -42,7 +42,7 @@ Replace `your-api-key-here` with a key from [Fireworks API Keys](https://app.fir
 .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open [the chatbot](http://127.0.0.1:8000). API documentation is at [localhost:8000/docs](http://127.0.0.1:8000/docs). Restart the server after changing `.env`; a shell environment variable takes precedence over the file. Stop the server with Ctrl+C.
+Open [the chatbot](http://127.0.0.1:8000). API documentation is at [localhost:8000/docs](http://127.0.0.1:8000/docs). Restart the server after changing `.env`, prompt files, or mock knowledge; a shell environment variable takes precedence over the file. Stop the server with Ctrl+C.
 
 These commands do not require activation. Using `.venv/bin/python` directly avoids a shell alias or function sending `python` to Xcode's interpreter even when the prompt shows `(.venv)`. For another machine, replace `/opt/homebrew/bin/python3.14` with the path to an installed Python 3.11+ interpreter. Check the environment with `.venv/bin/python --version` and `.venv/bin/python -m pip --version`; pip's path should be inside `.venv`.
 
@@ -52,7 +52,7 @@ Without a key, the interface still loads and shows a setup message. Once configu
 
 ## Try it
 
-Ask “What can you help me with?” and then “What is your return policy?” The second question demonstrates the missing-knowledge problem: no company policies have been supplied to the model. The prompt asks it to acknowledge that, but prompt instructions alone are not a correctness guarantee.
+Ask “How much does the Team plan cost?” and then “What is your refund policy?” The first question uses the supplied fictional plans; the second should acknowledge that refund information is missing. Also try “Where is order 12345?” and “Cancel my subscription now.” The assistant has no private records or tools. Prompt instructions and a valid schema do not guarantee factual correctness.
 
 The UI offers sample questions, Enter to send, Shift+Enter for new lines, and Clear chat. A failed request restores your question so you can retry. The visible transcript is only in the current browser page; each model request receives **only the latest question**.
 
@@ -64,27 +64,63 @@ curl http://127.0.0.1:8000/chat \
   -d '{"message":"What can you help me with?"}'
 ```
 
-A successful response is JSON with an `answer` string. Errors return a readable `detail` string. Input is limited to 4,000 characters, provider requests time out after 30 seconds, and automatic SDK retries are disabled. Output is capped at 2,048 tokens; incomplete replies are reported as errors.
+Successful replies follow this contract:
 
-## How step 01 works
+```json
+{
+  "intent": "unknown",
+  "answer": "The demo knowledge does not include a refund policy. Please contact human support.",
+  "requires_human": true,
+  "confidence": null
+}
+```
+
+The UI displays `answer`, keeps the structured fields in page memory, and shows a human-support recommendation when `requires_human` is true. It does not contact anyone or perform account actions. Confidence is an optional, uncalibrated model estimate, never an authorization rule.
+
+Input is limited to 4,000 characters. Each generation is capped at 2,048 tokens. Malformed, incomplete, or schema-invalid output gets one fresh retry, within a total 30-second budget. Persistent invalid output returns a validated `fallback` response with `requires_human=true`. Provider/network failures return readable HTTP errors with a `detail` string; automatic SDK retries remain disabled.
+
+## How the current app works
 
 ```text
 Browser (chat.js)
   → POST /chat with {"message": "..."}
   → FastAPI validates the message
-  → OpenAI SDK sends instructions + a user message
-  → Backend reads the final answer text
-  → Browser displays {"answer": "..."} as plain text
+  → OpenAI SDK sends versioned instructions + mock knowledge + the current question
+  → Provider generates JSON using a supplied schema
+  → Backend validates types, fields, and escalation rules (one retry if invalid)
+  → Browser displays answer as plain text and retains response metadata
 ```
 
-- **Instructions:** the backend's short system prompt defines the assistant's role and acknowledges missing store data.
+- **Instructions:** the versioned prompt defines the assistant’s role, uncertainty, refusal, and action boundaries.
 - **User message:** the customer's question is separate from those instructions.
 - **Tokens:** models process chunks of text, not a fixed number of words. Input characters and output tokens have separate limits here.
-- **Context window:** the maximum input/output context a model can handle. In this stage, context consists of instructions plus one question; the screen's transcript is not sent.
+- **Context window:** the maximum input/output context a model can handle. In this stage, context consists of instructions, the full mock knowledge file, the schema, and one question; the screen's transcript is not sent.
 - **Prompt design:** changing the instructions changes behavior, but cannot supply facts the application does not have.
 - **Conversation history:** follow-up references such as “it” may fail because prior messages are absent. We add durable memory in step 10.
 
-The endpoint's `ChatResponse` is just an HTTP response shape. It does not request structured model output; that remains step 02. No temperature setting, retrieval, tools, or agent framework is added in this step. Fireworks requests disable reasoning for this simple baseline.
+Step 02 adds provider-enforced JSON schema output and strict Pydantic backend validation using `AssistantResponse`. Extra fields, incorrect types, empty answers, invalid intents, and out-of-range confidence are rejected. Account, action, unknown, refusal, and fallback intents must recommend human support. The validator checks structure and these rules; it cannot prove that model text is truthful or that the chosen intent is correct.
+
+## Adjust the mock knowledge
+
+The committed [knowledge/mock-saas.example.md](knowledge/mock-saas.example.md) supplies fictional features, prices, trial terms, cancellation instructions, and support hours. It intentionally omits refund terms, an SLA, and private customer records. Create your local copy without overwriting an existing file:
+
+```sh
+cp -n knowledge/mock-saas.example.md knowledge/mock-saas.md
+```
+
+Edit `knowledge/mock-saas.md` freely; Git ignores it. Your existing local file is preserved. Without a custom path setting, the app uses this local file if present and otherwise uses the committed example, so fresh checkouts work immediately.
+
+For a different dataset, put it in the ignored `knowledge/local/` directory and set its path in your ignored `.env`:
+
+```dotenv
+SAAS_KNOWLEDGE_FILE=knowledge/local/my-saas.md
+```
+
+Relative paths resolve from the project root; absolute paths are also supported. An explicitly configured file must exist; a typo stops startup rather than silently loading the demo. Files elsewhere in the repository need their own ignore rules. Restart the server after changing the file or setting. Knowledge is sent to your selected model provider, even though Git ignores the local file. The current prompt and UI still identify this stage as fictional demo data.
+
+Edit [prompts/support-v1.txt](prompts/support-v1.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
+
+The whole knowledge file is included in each request. This is direct context injection, with no search, embeddings, database, tools, or persistent memory. Retrieval begins in Step 03.
 
 ## Verify
 
@@ -93,13 +129,16 @@ The endpoint's `ChatResponse` is just an HTTP response shape. It does not reques
 .venv/bin/python -m pip check
 ```
 
-The 36 backend cases exercise the real OpenAI SDK with simulated HTTP responses. They cover both provider paths, make no paid calls and ignore your `.env` and API key. Coverage includes single-turn payloads, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, and private-file access.
+The 74 backend cases exercise the real OpenAI SDK with simulated HTTP responses. They cover both provider paths, make no paid calls and ignore your `.env` and API key. Coverage includes single-turn payloads, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, schema-invalid JSON, bounded recovery, refusals, and private-file access.
 
-Browser verification covered the missing-key message and retry behavior, and a full send/receive round trip against a temporary simulated provider. This verifies plumbing, not model quality. Record real model observations using [the baseline checklist](steps/01-baseline.md) after configuring your key.
+Browser verification covered the missing-key message and retry behavior, a simulated-provider round trip, and a live Fireworks refund question with a human-support recommendation. HTML-containing output stayed plain text, and Clear chat removed response metadata. Four live Step 02 API spot checks covered pricing, unknown refunds, missing orders, and unavailable cancellation. Use the [Step 02 examples and completion notes](steps/02-structured-instructions.md) to compare live model behavior with the contract; the [Step 01 baseline](steps/01-baseline.md) preserves the original stage’s observations.
 
 ## Files to read first
 
-- `app/main.py` — prompt, provider lifecycle, input validation, and chat endpoint.
+- `app/main.py` — prompt loading, provider lifecycle, structured generation, retries, and chat endpoint.
+- `app/schemas.py` — response contract and validated fallback.
+- `prompts/support-v1.txt` — versioned behavior rules.
+- `knowledge/mock-saas.example.md` — committed fictional example; `knowledge/mock-saas.md` is your ignored local copy.
 - `app/static/index.html` — chat page structure.
 - `app/static/chat.js` — send, render, clear, and retry behavior.
 - `app/static/style.css` — responsive layout and visual styling.
@@ -111,8 +150,8 @@ Official references: [Fireworks OpenAI compatibility](https://docs.fireworks.ai/
 
 | Step | Build guide | Status |
 | --- | --- | --- |
-| 01 | [Ordinary chatbot](steps/01-ordinary-chatbot.md) | Implemented; live API check pending |
-| 02 | [Structured instructions and outputs](steps/02-structured-instructions.md) | Not started |
+| 01 | [Ordinary chatbot](steps/01-ordinary-chatbot.md) | Implemented; live UI connection verified during Step 02 |
+| 02 | [Structured instructions and outputs](steps/02-structured-instructions.md) | Implemented; mock knowledge and validated replies |
 | 03 | [First text RAG](steps/03-first-rag.md) | Not started |
 | 04 | [Improve retrieval](steps/04-better-retrieval.md) | Not started |
 | 05 | [Multimodal RAG](steps/05-multimodal-rag.md) | Not started |

@@ -8,8 +8,10 @@ const error = document.querySelector('#error');
 const suggestions = document.querySelectorAll('[data-question]');
 let busy = false;
 let idleStatus = 'Ready for a question';
+// Retain validated metadata for application logic; this is page-local, not model memory.
+const assistantResponses = [];
 
-function addMessage(role, text) {
+function addMessage(role, text, response = null) {
   const article = document.createElement('article');
   article.className = `message ${role}`;
   const speaker = document.createElement('p');
@@ -20,6 +22,15 @@ function addMessage(role, text) {
   // Treat both customer input and model output as text, never executable HTML.
   bubble.textContent = text;
   article.append(speaker, bubble);
+  if (response) {
+    article.dataset.intent = response.intent;
+    if (response.requires_human) {
+      const note = document.createElement('p');
+      note.className = 'support-note';
+      note.textContent = 'Human support recommended. No ticket has been created.';
+      article.append(note);
+    }
+  }
   messages.append(article);
   messages.scrollTop = messages.scrollHeight;
   return article;
@@ -55,7 +66,9 @@ form.addEventListener('submit', async (event) => {
     const data = await response.json();
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The request failed. Please try again.');
     if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('No reply was received. Please try again.');
-    addMessage('assistant', data.answer);
+    if (typeof data.intent !== 'string' || typeof data.requires_human !== 'boolean') throw new Error('The reply format was invalid. Please try again.');
+    assistantResponses.push(data);
+    addMessage('assistant', data.answer, data);
   } catch (failure) {
     userMessage.remove();
     input.value = message;
@@ -86,8 +99,9 @@ suggestions.forEach((button) => button.addEventListener('click', () => {
 }));
 
 clear.addEventListener('click', () => {
+  assistantResponses.length = 0;
   messages.replaceChildren();
-  addMessage('assistant', 'Hi there! I’m the SaaS support assistant. What would you like to know?');
+  addMessage('assistant', 'Hi! I can help with CloudDesk’s fictional demo plans and features. What would you like to know?');
   input.value = '';
   input.setCustomValidity('');
   error.hidden = true;

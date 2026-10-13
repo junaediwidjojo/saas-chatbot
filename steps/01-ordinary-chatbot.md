@@ -1,6 +1,6 @@
 # Step 01 — Ordinary chatbot
 
-Status: Implemented; live API smoke check pending
+Status: Implemented; live UI connection verified during Step 02
 
 ## Goal
 
@@ -25,7 +25,7 @@ System and user messages, API integration, tokens, context windows, prompt basic
 
 ## Done when
 
-- [ ] A message travels from the UI through the backend to the live LLM and the response appears in the UI. Simulated-provider browser round trip passed; live verification requires an API key.
+- [x] A message travels from the UI through the backend to the live LLM and the response appears in the UI. Verified with Fireworks DeepSeek-V4.1-Flash on 2026-10-13 using the current Step 02 prompt.
 - [x] No API key appears in browser code, logs, or committed files.
 - [x] README includes exact local setup and run commands.
 
@@ -46,5 +46,5 @@ Implemented on 2026-09-25.
 - Verification: 36 backend tests pass across OpenAI and Fireworks; dependency consistency and JavaScript syntax checks pass. Tests use the actual SDK with a simulated HTTP transport and make no paid calls.
 - Browser: verified missing-key feedback, restored draft after failure, and a successful simulated-provider round trip. Model output containing HTML markup remains plain text.
 - Baselines: [questions, observed checks, and live-run worksheet](01-baseline.md).
-- Limitation: no API key was configured during implementation. No real model output or factual accuracy is claimed. The remaining completion checkbox intentionally stays open.
+- Original limitation: no API key was configured during the Step 01 implementation. The live browser connection was subsequently verified during Step 02; its results are recorded in [Step 02](02-structured-instructions.md). The original single-turn baseline worksheet remains historical and was not rerun with the original prompt.
 - Scope: only the current message is sent; no retrieval, database, tools, durable memory, or structured model output is implemented.
