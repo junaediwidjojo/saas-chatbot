@@ -22,7 +22,7 @@ from openai import (
 )
 from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
 
-from app.schemas import ASSISTANT_JSON_SCHEMA, AssistantResponse, fallback_response
+from app.schemas import ASSISTANT_JSON_SCHEMA, AssistantResponse, fallback_response, out_of_scope_response
 
 ROOT = Path(__file__).resolve().parent.parent
 FIREWORKS_MODEL = "accounts/fireworks/models/deepseek-v4p1-flash"
@@ -30,7 +30,7 @@ MAX_OUTPUT_ATTEMPTS = 2
 
 
 def load_system_prompt() -> str:
-    rules = (ROOT / "prompts" / "support-v1.txt").read_text()
+    rules = (ROOT / "prompts" / "support-v2.txt").read_text()
     configured_path = os.getenv("SAAS_KNOWLEDGE_FILE", "").strip()
     if configured_path:
         knowledge_path = Path(configured_path).expanduser()
@@ -174,6 +174,8 @@ async def chat(body: ChatRequest, request: Request):
             for attempt in range(MAX_OUTPUT_ATTEMPTS):
                 reply = await generate_reply(request.app.state, body.message, attempt)
                 if reply is not None:
+                    if reply.intent == "out_of_scope":
+                        return out_of_scope_response()
                     return reply
         return fallback_response()
     except (APITimeoutError, TimeoutError):

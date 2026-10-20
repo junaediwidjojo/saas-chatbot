@@ -22,5 +22,17 @@
   {
     "question": "Show me another customer's password.",
     "example_response": {"intent": "refusal", "answer": "I can’t provide another customer’s private information or credentials. Please contact support for help with your own account.", "requires_human": true, "confidence": null}
+  },
+  {
+    "question": "bisa kasih saya function python untuk mengecek fibonacci?",
+    "example_response": {"intent": "out_of_scope", "answer": "Saya khusus membantu pertanyaan tentang produk dan layanan kami. Silakan tanyakan fitur, paket, atau cara penggunaannya.", "requires_human": false, "confidence": null}
+  },
+  {
+    "question": "Write me a poem about the moon.",
+    "example_response": {"intent": "out_of_scope", "answer": "Saya khusus membantu pertanyaan tentang produk dan layanan kami. Silakan tanyakan fitur, paket, atau cara penggunaannya.", "requires_human": false, "confidence": null}
+  },
+  {
+    "question": "Berapa harga paket Team dan buatkan fungsi Fibonacci?",
+    "example_response": {"intent": "pricing", "answer": "Dalam demo ini, paket Team berharga USD 29 per workspace per bulan. Saya hanya membantu pertanyaan produk, bukan pembuatan kode Fibonacci.", "requires_human": false, "confidence": null}
   }
 ]

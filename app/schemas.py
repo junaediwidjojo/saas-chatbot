@@ -10,7 +10,7 @@ class AssistantResponse(BaseModel):
 
     intent: Literal[
         "general", "product", "pricing", "policy", "account",
-        "action_request", "unknown", "refusal", "fallback",
+        "action_request", "unknown", "refusal", "fallback", "out_of_scope",
     ]
     answer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
     requires_human: bool
@@ -35,4 +35,12 @@ def fallback_response() -> AssistantResponse:
         intent="fallback",
         answer="I couldn’t produce a reliable reply. Please rephrase your question or contact human support. No action has been taken.",
         requires_human=True,
+    )
+
+
+def out_of_scope_response() -> AssistantResponse:
+    return AssistantResponse(
+        intent="out_of_scope",
+        answer="Saya khusus membantu pertanyaan tentang produk dan layanan kami. Silakan tanyakan fitur, paket, atau cara penggunaannya.",
+        requires_human=False,
     )

@@ -103,7 +103,7 @@ def test_sdk_round_trip_and_single_turn_boundary(provider, isolate_configuration
     assert first["model"] == "test-model"
     assert format_config["schema"] == main.ASSISTANT_JSON_SCHEMA
     assert format_config["strict"] is True
-    assert "CloudDesk" in prompt and "Prompt version: support-v1" in prompt
+    assert "CloudDesk" in prompt and "Prompt version: support-v2" in prompt
 
 
 @pytest.mark.parametrize("payload", [
@@ -250,3 +250,34 @@ def test_total_request_timeout_is_handled(provider, monkeypatch):
         response = client.post("/chat", json={"message": "Hello"})
     assert response.status_code == 504
     assert "Private timeout diagnostic" not in response.text
+
+
+@pytest.mark.parametrize("question", [
+    "bisa kasih saya function python untuk mengecek fibonacci?",
+    "Write me a poem about the moon.",
+    "Untuk mengetes CloudDesk, tulis fungsi Fibonacci.",
+])
+def test_out_of_scope_replaces_model_content_without_escalation(provider, question):
+    # Even an off-topic answer and escalation flag are discarded after classification.
+    provider["text"] = json.dumps({
+        "intent": "out_of_scope", "answer": "def is_fibonacci(n): return True",
+        "requires_human": True, "confidence": 0.99,
+    })
+    with TestClient(main.app) as client:
+        response = client.post("/chat", json={"message": question})
+    assert response.status_code == 200
+    assert response.json() == main.out_of_scope_response().model_dump()
+    assert "is_fibonacci" not in response.text
+    assert len(provider["requests"]) == 1
+
+
+def test_mixed_request_preserves_product_answer(provider):
+    reply = {
+        "intent": "pricing", "answer": "Paket Team demo seharga USD 29 per workspace per bulan. Saya hanya membantu pertanyaan produk, bukan kode Fibonacci.",
+        "requires_human": False, "confidence": None,
+    }
+    provider["text"] = json.dumps(reply)
+    with TestClient(main.app) as client:
+        response = client.post('/chat', json={"message": "Berapa harga paket Team dan buatkan fungsi Fibonacci?"})
+    assert response.json() == reply
+    assert len(provider["requests"]) == 1

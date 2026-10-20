@@ -65,3 +65,14 @@ Verified on 2026-10-13 using Fireworks `accounts/fireworks/models/deepseek-v4p1-
 | Cancel my subscription now. | `action_request`, human support true; said it could not cancel or confirm escalation, and gave the demo settings path. |
 
 The refund question was also sent from the actual browser, where the answer and human-support note appeared successfully. No real customer facts or credentials were submitted in these checks.
+
+
+### Topic boundaries — 2026-10-20
+
+- Active instructions are now `prompts/support-v2.txt`; v1 remains for comparison.
+- Added `out_of_scope` for unrelated coding, math, poems, and trivia in any language, with Indonesian and English examples. Greetings and product support remain allowed. Mixed requests should answer only the product portion; unknown product facts still need human support.
+- On `out_of_scope`, the backend replaces model answer, escalation, and confidence with a fixed Indonesian reminder, false, and null. No separate classification request is added.
+- Regression checks verify replacement even when the model includes code and recommends escalation, plus preservation of a valid product-only answer to a mixed request. Simulations verify backend behavior, not the model's classification accuracy.
+- Limit: a model that misclassifies an unrelated question can still produce an unrelated answer. Mixed-request filtering also depends on prompt compliance.
+- Verification: 82 tests pass across both providers; dependency consistency, JavaScript syntax, and whitespace checks pass.
+- Live Fireworks spot checks with committed example knowledge: Indonesian Fibonacci and English poem requests returned the fixed `out_of_scope` response without escalation; an Indonesian Team pricing question returned the documented price; a mixed pricing/Fibonacci request answered pricing and declined code generation. All returned HTTP 200. These four observations do not guarantee classification accuracy on every input.

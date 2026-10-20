@@ -100,6 +100,12 @@ Browser (chat.js)
 
 Step 02 adds provider-enforced JSON schema output and strict Pydantic backend validation using `AssistantResponse`. Extra fields, incorrect types, empty answers, invalid intents, and out-of-range confidence are rejected. Account, action, unknown, refusal, and fallback intents must recommend human support. The validator checks structure and these rules; it cannot prove that model text is truthful or that the chosen intent is correct.
 
+## Topic boundaries
+
+The active prompt is `support-v2`; `support-v1` is preserved as the earlier version. Greetings and SaaS support questions are allowed. Unrelated code, mathematics, poems, and trivia use `out_of_scope`. The backend discards the model's answer and returns a fixed Indonesian scope reminder with `requires_human=false` and `confidence=null`. This uses the existing single generation on the normal path; no separate classifier call is added.
+
+Mixed requests should answer only the product-related portion and decline the rest. Missing product facts still use `unknown` and recommend human support. Classification and mixed-answer compliance depend on the model; the fixed reply applies only when it selects `out_of_scope`. Restart the server to load the new prompt.
+
 ## Adjust the mock knowledge
 
 The committed [knowledge/mock-saas.example.md](knowledge/mock-saas.example.md) supplies fictional features, prices, trial terms, cancellation instructions, and support hours. It intentionally omits refund terms, an SLA, and private customer records. Create your local copy without overwriting an existing file:
@@ -118,7 +124,7 @@ SAAS_KNOWLEDGE_FILE=knowledge/local/my-saas.md
 
 Relative paths resolve from the project root; absolute paths are also supported. An explicitly configured file must exist; a typo stops startup rather than silently loading the demo. Files elsewhere in the repository need their own ignore rules. Restart the server after changing the file or setting. Knowledge is sent to your selected model provider, even though Git ignores the local file. The current prompt and UI still identify this stage as fictional demo data.
 
-Edit [prompts/support-v1.txt](prompts/support-v1.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
+Edit [prompts/support-v2.txt](prompts/support-v2.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
 
 The whole knowledge file is included in each request. This is direct context injection, with no search, embeddings, database, tools, or persistent memory. Retrieval begins in Step 03.
 
@@ -129,7 +135,7 @@ The whole knowledge file is included in each request. This is direct context inj
 .venv/bin/python -m pip check
 ```
 
-The 74 backend cases exercise the real OpenAI SDK with simulated HTTP responses. They cover both provider paths, make no paid calls and ignore your `.env` and API key. Coverage includes single-turn payloads, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, schema-invalid JSON, bounded recovery, refusals, and private-file access.
+The 82 backend cases exercise the real OpenAI SDK with simulated HTTP responses. They cover both provider paths, make no paid calls and ignore your `.env` and API key. Coverage includes single-turn payloads, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, schema-invalid JSON, bounded recovery, refusals, and private-file access.
 
 Browser verification covered the missing-key message and retry behavior, a simulated-provider round trip, and a live Fireworks refund question with a human-support recommendation. HTML-containing output stayed plain text, and Clear chat removed response metadata. Four live Step 02 API spot checks covered pricing, unknown refunds, missing orders, and unavailable cancellation. Use the [Step 02 examples and completion notes](steps/02-structured-instructions.md) to compare live model behavior with the contract; the [Step 01 baseline](steps/01-baseline.md) preserves the original stage’s observations.
 
@@ -137,7 +143,7 @@ Browser verification covered the missing-key message and retry behavior, a simul
 
 - `app/main.py` — prompt loading, provider lifecycle, structured generation, retries, and chat endpoint.
 - `app/schemas.py` — response contract and validated fallback.
-- `prompts/support-v1.txt` — versioned behavior rules.
+- `prompts/support-v2.txt` — versioned behavior rules.
 - `knowledge/mock-saas.example.md` — committed fictional example; `knowledge/mock-saas.md` is your ignored local copy.
 - `app/static/index.html` — chat page structure.
 - `app/static/chat.js` — send, render, clear, and retry behavior.
