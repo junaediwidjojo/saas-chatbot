@@ -10,6 +10,17 @@ let busy = false;
 let idleStatus = 'Ready for a question';
 // Retain validated metadata for application logic; this is page-local, not model memory.
 const assistantResponses = [];
+const conversationHistory = [];
+const MAX_HISTORY_MESSAGES = 10;
+const MAX_HISTORY_CHARACTERS = 16000;
+
+function rememberExchange(question, answer) {
+  conversationHistory.push({ role: 'user', content: question }, { role: 'assistant', content: answer });
+  while (conversationHistory.length > MAX_HISTORY_MESSAGES ||
+      conversationHistory.reduce((total, item) => total + Array.from(item.content).length, 0) > MAX_HISTORY_CHARACTERS) {
+    conversationHistory.splice(0, 2);
+  }
+}
 
 function addMessage(role, text, response = null) {
   const article = document.createElement('article');
@@ -60,7 +71,7 @@ form.addEventListener('submit', async (event) => {
     const response = await fetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, history: conversationHistory }),
       signal: AbortSignal.timeout(45000),
     });
     const data = await response.json();
@@ -69,6 +80,7 @@ form.addEventListener('submit', async (event) => {
     if (typeof data.intent !== 'string' || typeof data.requires_human !== 'boolean') throw new Error('The reply format was invalid. Please try again.');
     assistantResponses.push(data);
     addMessage('assistant', data.answer, data);
+    rememberExchange(message, data.answer);
   } catch (failure) {
     userMessage.remove();
     input.value = message;
@@ -100,6 +112,7 @@ suggestions.forEach((button) => button.addEventListener('click', () => {
 
 clear.addEventListener('click', () => {
   assistantResponses.length = 0;
+  conversationHistory.length = 0;
   messages.replaceChildren();
   addMessage('assistant', 'Hi! I can help with CloudDesk’s fictional demo plans and features. What would you like to know?');
   input.value = '';

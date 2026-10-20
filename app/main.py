@@ -5,7 +5,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -20,7 +20,7 @@ from openai import (
     AuthenticationError,
     RateLimitError,
 )
-from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, model_validator
 
 from app.schemas import ASSISTANT_JSON_SCHEMA, AssistantResponse, fallback_response, out_of_scope_response
 
@@ -30,7 +30,7 @@ MAX_OUTPUT_ATTEMPTS = 2
 
 
 def load_system_prompt() -> str:
-    rules = (ROOT / "prompts" / "support-v2.txt").read_text()
+    rules = (ROOT / "prompts" / "support-v3.txt").read_text()
     configured_path = os.getenv("SAAS_KNOWLEDGE_FILE", "").strip()
     if configured_path:
         knowledge_path = Path(configured_path).expanduser()
@@ -76,9 +76,26 @@ app = FastAPI(title="SaaS Chatbot", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
 
 
+class HistoryMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    role: Literal["user", "assistant"]
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+
+
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+    history: Annotated[list[HistoryMessage], Field(max_length=10)] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_history(self):
+        if len(self.history) % 2:
+            raise ValueError("History must contain completed exchanges.")
+        if any(item.role != ("user" if index % 2 == 0 else "assistant") for index, item in enumerate(self.history)):
+            raise ValueError("History must alternate user and assistant messages.")
+        if sum(len(item.content) for item in self.history) > 16000:
+            raise ValueError("History exceeds 16,000 characters.")
+        return self
 
 
 @app.exception_handler(RequestValidationError)
@@ -86,7 +103,7 @@ async def invalid_request(_request: Request, _error: RequestValidationError):
     # Do not echo user input or internal validation details into error responses.
     return JSONResponse(
         status_code=422,
-        content={"detail": "Send a message containing 1–4,000 characters."},
+        content={"detail": "Send a message containing 1–4,000 characters, with up to 5 completed user/assistant exchanges totaling at most 16,000 history characters."},
     )
 
 
@@ -101,17 +118,18 @@ async def health(request: Request):
     return {"status": "ok", "configured": request.app.state.openai is not None}
 
 
-async def generate_reply(state, message: str, attempt: int) -> AssistantResponse | None:
+async def generate_reply(state, message: str, attempt: int, history: list[HistoryMessage]) -> AssistantResponse | None:
     instructions = state.system_prompt
     if attempt:
         # Do not echo malformed model output or private validation diagnostics.
         instructions += "\nThe previous generation was invalid or incomplete. Return a complete JSON object matching the schema and escalation rules."
+    conversation = [item.model_dump() for item in history] + [{"role": "user", "content": message}]
     if state.provider == "fireworks":
         response = await state.openai.chat.completions.create(
             model=state.model,
             messages=[
                 {"role": "system", "content": instructions},
-                {"role": "user", "content": message},
+                *conversation,
             ],
             response_format={
                 "type": "json_schema",
@@ -130,7 +148,7 @@ async def generate_reply(state, message: str, attempt: int) -> AssistantResponse
         response = await state.openai.responses.create(
             model=state.model,
             instructions=instructions,
-            input=[{"role": "user", "content": message}],
+            input=conversation,
             text={"format": {
                 "type": "json_schema", "name": "AssistantResponse",
                 "schema": ASSISTANT_JSON_SCHEMA, "strict": True,
@@ -172,7 +190,7 @@ async def chat(body: ChatRequest, request: Request):
         # The original 30-second budget covers both attempts, not 30s per attempt.
         async with asyncio.timeout(30):
             for attempt in range(MAX_OUTPUT_ATTEMPTS):
-                reply = await generate_reply(request.app.state, body.message, attempt)
+                reply = await generate_reply(request.app.state, body.message, attempt, body.history)
                 if reply is not None:
                     if reply.intent == "out_of_scope":
                         return out_of_scope_response()

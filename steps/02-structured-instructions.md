@@ -76,3 +76,14 @@ The refund question was also sent from the actual browser, where the answer and 
 - Limit: a model that misclassifies an unrelated question can still produce an unrelated answer. Mixed-request filtering also depends on prompt compliance.
 - Verification: 82 tests pass across both providers; dependency consistency, JavaScript syntax, and whitespace checks pass.
 - Live Fireworks spot checks with committed example knowledge: Indonesian Fibonacci and English poem requests returned the fixed `out_of_scope` response without escalation; an Indonesian Team pricing question returned the documented price; a mixed pricing/Fibonacci request answered pricing and declined code generation. All returned HTTP 200. These four observations do not guarantee classification accuracy on every input.
+
+
+### Bounded conversation history — 2026-10-20
+
+- Added at the user's request before the planned durable-memory step. `support-v3` is active; earlier prompt versions remain historical.
+- Browser sends up to five completed user/assistant exchanges, at most 16,000 characters total, before the current question. Per-message history limit: 4,000 characters. Older pairs are trimmed; no automatic summary is generated.
+- Only successful displayed answers enter history, including safe fallback/scope reminders. Failed HTTP requests do not enter history. Clear chat and refresh reset it; no database, browser storage, provider conversation ID, or server-side history is used.
+- Backend validates roles, alternating pairs, message count, and size; it supplies system rules itself. Historical text is untrusted context, never evidence of company facts, identity, permission, or completed actions.
+- Verification: 114 backend tests pass across both providers, covering history forwarding/order, retry preservation, no server-side carryover, invalid roles, extra fields, malformed pairs, and boundary sizes.
+- Browser checks with simulated replies verified follow-up payloads, failed-request exclusion, retry without duplicates, five-exchange and character-limit trimming (including emoji), metadata exclusion, Clear chat, and refresh reset.
+- Live Fireworks browser spot check using the committed example: after asking the price of Team, “Berapa batas anggotanya?” correctly answered the Team member limit of 20. This verifies one follow-up, not general model accuracy.

@@ -54,7 +54,7 @@ Without a key, the interface still loads and shows a setup message. Once configu
 
 Ask “How much does the Team plan cost?” and then “What is your refund policy?” The first question uses the supplied fictional plans; the second should acknowledge that refund information is missing. Also try “Where is order 12345?” and “Cancel my subscription now.” The assistant has no private records or tools. Prompt instructions and a valid schema do not guarantee factual correctness.
 
-The UI offers sample questions, Enter to send, Shift+Enter for new lines, and Clear chat. A failed request restores your question so you can retry. The visible transcript is only in the current browser page; each model request receives **only the latest question**.
+The UI offers sample questions, Enter to send, Shift+Enter for new lines, and Clear chat. A failed request restores your question so you can retry. The visible transcript and recent history stay in page memory. Each request sends the latest question plus up to five completed exchanges (ten messages), totaling at most 16,000 history characters. Each history message is limited to 4,000 characters. Older exchanges are removed in pairs when either limit is reached; the visible transcript may still show them. Clear chat or refresh resets the context. Failed HTTP requests do not enter history; successful fallback and scope reminders do, exactly as displayed.
 
 A direct API check:
 
@@ -85,7 +85,7 @@ Input is limited to 4,000 characters. Each generation is capped at 2,048 tokens.
 Browser (chat.js)
   → POST /chat with {"message": "..."}
   → FastAPI validates the message
-  → OpenAI SDK sends versioned instructions + mock knowledge + the current question
+  → OpenAI SDK sends versioned instructions + mock knowledge + recent exchanges + the current question
   → Provider generates JSON using a supplied schema
   → Backend validates types, fields, and escalation rules (one retry if invalid)
   → Browser displays answer as plain text and retains response metadata
@@ -94,15 +94,15 @@ Browser (chat.js)
 - **Instructions:** the versioned prompt defines the assistant’s role, uncertainty, refusal, and action boundaries.
 - **User message:** the customer's question is separate from those instructions.
 - **Tokens:** models process chunks of text, not a fixed number of words. Input characters and output tokens have separate limits here.
-- **Context window:** the maximum input/output context a model can handle. In this stage, context consists of instructions, the full mock knowledge file, the schema, and one question; the screen's transcript is not sent.
+- **Context window:** the maximum input/output context a model can handle. In this stage, context consists of instructions, the full mock knowledge file, the schema, bounded recent history, and the latest question; only the bounded recent history is sent, not necessarily the entire visible transcript.
 - **Prompt design:** changing the instructions changes behavior, but cannot supply facts the application does not have.
-- **Conversation history:** follow-up references such as “it” may fail because prior messages are absent. We add durable memory in step 10.
+- **Conversation history:** recent exchanges let follow-ups such as “What about its member limit?” refer to prior answers. The backend accepts only user/assistant pairs; the system prompt is always supplied by the server. Browser history is untrusted context, not proof of company facts, identity, or completed actions. Durable memory remains Step 10.
 
 Step 02 adds provider-enforced JSON schema output and strict Pydantic backend validation using `AssistantResponse`. Extra fields, incorrect types, empty answers, invalid intents, and out-of-range confidence are rejected. Account, action, unknown, refusal, and fallback intents must recommend human support. The validator checks structure and these rules; it cannot prove that model text is truthful or that the chosen intent is correct.
 
 ## Topic boundaries
 
-The active prompt is `support-v2`; `support-v1` is preserved as the earlier version. Greetings and SaaS support questions are allowed. Unrelated code, mathematics, poems, and trivia use `out_of_scope`. The backend discards the model's answer and returns a fixed Indonesian scope reminder with `requires_human=false` and `confidence=null`. This uses the existing single generation on the normal path; no separate classifier call is added.
+The active prompt is `support-v3`; earlier prompt versions are preserved for comparison. Greetings and SaaS support questions are allowed. Unrelated code, mathematics, poems, and trivia use `out_of_scope`. The backend discards the model's answer and returns a fixed Indonesian scope reminder with `requires_human=false` and `confidence=null`. This uses the existing single generation on the normal path; no separate classifier call is added.
 
 Mixed requests should answer only the product-related portion and decline the rest. Missing product facts still use `unknown` and recommend human support. Classification and mixed-answer compliance depend on the model; the fixed reply applies only when it selects `out_of_scope`. Restart the server to load the new prompt.
 
@@ -124,7 +124,7 @@ SAAS_KNOWLEDGE_FILE=knowledge/local/my-saas.md
 
 Relative paths resolve from the project root; absolute paths are also supported. An explicitly configured file must exist; a typo stops startup rather than silently loading the demo. Files elsewhere in the repository need their own ignore rules. Restart the server after changing the file or setting. Knowledge is sent to your selected model provider, even though Git ignores the local file. The current prompt and UI still identify this stage as fictional demo data.
 
-Edit [prompts/support-v2.txt](prompts/support-v2.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
+Edit [prompts/support-v3.txt](prompts/support-v3.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
 
 The whole knowledge file is included in each request. This is direct context injection, with no search, embeddings, database, tools, or persistent memory. Retrieval begins in Step 03.
 
@@ -135,7 +135,7 @@ The whole knowledge file is included in each request. This is direct context inj
 .venv/bin/python -m pip check
 ```
 
-The 82 backend cases exercise the real OpenAI SDK with simulated HTTP responses. They cover both provider paths, make no paid calls and ignore your `.env` and API key. Coverage includes single-turn payloads, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, schema-invalid JSON, bounded recovery, refusals, and private-file access.
+The 114 backend cases exercise the real OpenAI SDK with simulated HTTP responses. They cover both provider paths, make no paid calls and ignore your `.env` and API key. Coverage includes requests with and without history, history roles/order/size limits, retry preservation, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, schema-invalid JSON, bounded recovery, refusals, and private-file access.
 
 Browser verification covered the missing-key message and retry behavior, a simulated-provider round trip, and a live Fireworks refund question with a human-support recommendation. HTML-containing output stayed plain text, and Clear chat removed response metadata. Four live Step 02 API spot checks covered pricing, unknown refunds, missing orders, and unavailable cancellation. Use the [Step 02 examples and completion notes](steps/02-structured-instructions.md) to compare live model behavior with the contract; the [Step 01 baseline](steps/01-baseline.md) preserves the original stage’s observations.
 
@@ -143,7 +143,7 @@ Browser verification covered the missing-key message and retry behavior, a simul
 
 - `app/main.py` — prompt loading, provider lifecycle, structured generation, retries, and chat endpoint.
 - `app/schemas.py` — response contract and validated fallback.
-- `prompts/support-v2.txt` — versioned behavior rules.
+- `prompts/support-v3.txt` — versioned behavior rules.
 - `knowledge/mock-saas.example.md` — committed fictional example; `knowledge/mock-saas.md` is your ignored local copy.
 - `app/static/index.html` — chat page structure.
 - `app/static/chat.js` — send, render, clear, and retry behavior.
@@ -165,7 +165,7 @@ Official references: [Fireworks OpenAI compatibility](https://docs.fireworks.ai/
 | 07 | [Controlled tools and authorization](steps/07-tool-boundaries.md) | Not started |
 | 08 | [Combine RAG and tools](steps/08-rag-and-tools.md) | Not started |
 | 09 | [Confirmed write actions](steps/09-confirmed-actions.md) | Not started |
-| 10 | [Conversation memory](steps/10-conversation-memory.md) | Not started |
+| 10 | [Conversation memory](steps/10-conversation-memory.md) | Durable memory not started; bounded browser history available |
 | 11 | [Evaluation and observability](steps/11-evaluation-and-observability.md) | Not started |
 
 ## Target capabilities
