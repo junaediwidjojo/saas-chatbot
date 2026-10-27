@@ -28,7 +28,7 @@ function element() {
 async function browserHarness() {
   const nodes = new Map();
   const calls = [];
-  const state = { summaryFailure: false, chatFailure: false, invalidSummary: false };
+  const state = { summaryFailure: false, chatFailure: false, invalidSummary: false, citations: [] };
   const context = vm.createContext({
     TextEncoder, AbortSignal,
     document: {
@@ -57,7 +57,7 @@ async function browserHarness() {
         });
       }
       if (state.chatFailure) return response(false, { detail: 'Chat unavailable; retry.' });
-      return response(true, { intent: 'product', answer: 'Displayed demo answer.', requires_human: false, confidence: null });
+      return response(true, { intent: 'product', answer: 'Displayed demo answer.', requires_human: false, confidence: null, citations: state.citations });
     },
   });
   vm.runInContext(source, context);
@@ -76,6 +76,10 @@ async function browserHarness() {
     },
     draft() {
       return nodes.get('#message').value;
+    },
+    displayedSources() {
+      return nodes.get('#messages').children.flatMap(article => article.children)
+        .filter(child => child.className === 'source-note').map(child => child.textContent);
     },
   };
 }
@@ -138,4 +142,14 @@ test('size trigger runs before the exchange limit; reset clears summary and hist
   assert.deepEqual(app.snapshot(), { summary: '', history: [] });
   const freshPage = await browserHarness();
   assert.deepEqual(freshPage.snapshot(), { summary: '', history: [] });
+});
+
+test('citations are displayed as text and excluded from conversation memory', async () => {
+  const app = await browserHarness();
+  app.state.citations = [{ id: 'chunk-1', section: '<img src=x onerror=alert(1)>', version: 'abcdef012345' }];
+  await app.send('What are the plans?');
+  assert.deepEqual(app.displayedSources(), ['Sources: <img src=x onerror=alert(1)> (version abcdef01)']);
+  assert.equal(app.snapshot().history[1].content, 'Displayed demo answer.');
+  await app.send('What about Gold?');
+  assert.deepEqual(Object.keys(app.calls.at(-1).body.history[1]).sort(), ['content', 'role']);
 });

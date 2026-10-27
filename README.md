@@ -1,8 +1,8 @@
 # SaaS Chatbot
 
-A staged AI engineering learning project: build a customer-support chatbot for a fictional **SaaS company**, one concept at a time.
+A staged AI engineering learning project: build a customer-support chatbot for a **SaaS company**, with fictional committed examples and optional local business knowledge, one concept at a time.
 
-Steps 01 and 02 are implemented with Python, FastAPI, a plain HTML/CSS/JavaScript frontend, and the official OpenAI SDK. Replies now follow a validated contract and use clearly fictional CloudDesk knowledge. No database has been initialized. The Git repository is hosted at [junaediwidjojo/saas-chatbot](https://github.com/junaediwidjojo/saas-chatbot).
+Steps 01–03 are implemented with Python, FastAPI, a plain HTML/CSS/JavaScript frontend, and the official OpenAI SDK. Replies follow a validated contract and use retrieved passages from your selected knowledge file, with source citations. The committed examples are fictional; your local dataset can describe your own SaaS. SQLite is used only as the retrieval index; no customer database is connected. The Git repository is hosted at [junaediwidjojo/saas-chatbot](https://github.com/junaediwidjojo/saas-chatbot).
 
 ## How we will build it
 
@@ -46,13 +46,28 @@ Open [the chatbot](http://127.0.0.1:8000). API documentation is at [localhost:80
 
 These commands do not require activation. Using `.venv/bin/python` directly avoids a shell alias or function sending `python` to Xcode's interpreter even when the prompt shows `(.venv)`. For another machine, replace `/opt/homebrew/bin/python3.14` with the path to an installed Python 3.11+ interpreter. Check the environment with `.venv/bin/python --version` and `.venv/bin/python -m pip --version`; pip's path should be inside `.venv`.
 
+Before starting chat, build the selected knowledge index:
+
+```sh
+.venv/bin/python -m app.ingest
+```
+
+This sends the selected knowledge chunks to Fireworks for embeddings using `FIREWORKS_API_KEY`, and stores text/vectors locally in the ignored `.rag/` directory. Run it again after knowledge edits; unchanged chunks reuse embeddings, changed chunks are updated, and removed chunks disappear. Restart the server after ingestion. For a separate fictional-only trial, use:
+
+```sh
+SAAS_KNOWLEDGE_FILE=knowledge/rag-example.md RAG_INDEX_FILE=.rag/example.sqlite3 .venv/bin/python -m app.ingest
+SAAS_KNOWLEDGE_FILE=knowledge/rag-example.md RAG_INDEX_FILE=.rag/example.sqlite3 SAAS_NAME=DemoBuilder SAAS_BRAND_FILE= .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+The app loads without an index and shows setup feedback; chat returns a setup error until an index matching the selected source and embedding configuration is available. It never silently falls back to sending the whole file.
+
 Without a key, the interface still loads and shows a setup message. Once configured, each Send calls your selected provider and may incur API usage charges. This is a local learning app, with no authentication or deployment setup.
 
 `requirements.txt` pins direct runtime dependencies, `requirements-dev.txt` adds test dependencies, and `requirements-lock.txt` records the full tested environment. The setup above installs the full lock, including tests.
 
 ## Try it
 
-Ask “How much does the Team plan cost?” and then “What is your refund policy?” The first question uses the supplied fictional plans; the second should acknowledge that refund information is missing. Also try “Where is order 12345?” and “Cancel my subscription now.” The assistant has no private records or tools. Prompt instructions and a valid schema do not guarantee factual correctness.
+For the DemoBuilder RAG fixture, ask “Apakah Gold punya fitur formulir?” and “Apa kebijakan refund langganan umum?” The first requires Gold inheritance plus Silver features; the second should acknowledge missing general refund information. For your local Jagel dataset, also try “Berapa harga paket Silver?”, “Bagaimana membuat ojek online?”, and “Apakah remote support gratis untuk Platinum?” The assistant has no private records or tools. Prompt instructions and a valid schema do not guarantee factual correctness.
 
 The UI offers sample questions, Enter to send, Shift+Enter for new lines, and Clear chat. A failed request restores your question so you can retry. The visible transcript, recent history, and rolling summary stay in page memory. Each chat request sends the latest question, a summary of older discussion when available, and recent completed exchanges. Clear chat or refresh resets all three. Failed HTTP requests do not enter history; successful fallback and scope reminders do, exactly as displayed.
 
@@ -77,9 +92,13 @@ Successful replies follow this contract:
   "intent": "unknown",
   "answer": "The demo knowledge does not include a refund policy. Please contact human support.",
   "requires_human": true,
-  "confidence": null
+  "confidence": null,
+  "citation_ids": [],
+  "citations": []
 }
 ```
+
+Factual `product`, `pricing`, and `policy` answers require nonempty `citation_ids`. The backend verifies every ID against the passages retrieved for that request, rejects duplicates/unknown IDs, and supplies `citations` metadata (title, section, document version) from the index. The UI displays these sources as text. Citation validation proves source identity, not factual entailment; the answer still needs review. Greetings, conversation recall, unknown answers, and unavailable account actions can have empty citations.
 
 The UI displays `answer`, keeps the structured fields in page memory, and shows a human-support recommendation when `requires_human` is true. It does not contact anyone or perform account actions. Confidence is an optional, uncalibrated model estimate, never an authorization rule.
 
@@ -91,16 +110,18 @@ Input is limited to 4,000 characters. Each generation is capped at 2,048 tokens.
 Browser (chat.js)
   → POST /chat with {"message": "..."}
   → FastAPI validates the message
-  → OpenAI SDK sends versioned instructions + mock knowledge + untrusted summary + recent exchanges + the current question
+  → Embed the question with recent user context and search the local SQLite vector index
+  → Expand inherited-plan references within the context budget
+  → OpenAI SDK sends instructions + selected passages + untrusted summary + recent exchanges + question
   → Provider generates JSON using a supplied schema
-  → Backend validates types, fields, and escalation rules (one retry if invalid)
+  → Backend validates types, fields, escalation rules, and citation IDs (one retry if invalid)
   → Browser displays answer as plain text and retains response metadata
 ```
 
 - **Instructions:** the versioned prompt defines the assistant’s role, uncertainty, refusal, and action boundaries.
 - **User message:** the customer's question is separate from those instructions.
 - **Tokens:** models process chunks of text, not a fixed number of words. Input characters and output tokens have separate limits here.
-- **Context window:** the maximum input/output context a model can handle. In this stage, context consists of instructions, the full mock knowledge file, the schema, a bounded summary, recent history, and the latest question; only the bounded recent history is sent, not necessarily the entire visible transcript.
+- **Context window:** the maximum input/output context a model can handle. In this stage, context consists of instructions, selected evidence passages, the schema, a bounded summary, recent history, and the latest question; only the bounded recent history is sent, not necessarily the entire visible transcript.
 - **Prompt design:** changing the instructions changes behavior, but cannot supply facts the application does not have.
 - **Conversation history:** recent exchanges retain exact wording; a rolling summary carries older goals, preferences, references, unresolved questions, and corrections. The backend accepts only user/assistant pairs; system instructions always come from the server. Browser history and summaries are untrusted context, not proof of facts, identity, or completed actions. Durable storage remains Step 10.
 
@@ -108,7 +129,7 @@ Step 02 adds provider-enforced JSON schema output and strict Pydantic backend va
 
 ## Topic boundaries
 
-The active prompt is `support-v4`; earlier prompt versions are preserved for comparison. Greetings and SaaS support questions are allowed. Unrelated code, mathematics, poems, and trivia use `out_of_scope`. The backend discards the model's answer and returns a fixed Indonesian scope reminder with `requires_human=false` and `confidence=null`. This uses the existing single generation on the normal path; no separate classifier call is added.
+The active prompt is `support-v5`; earlier prompt versions are preserved for comparison. Greetings and SaaS support questions are allowed. Unrelated code, mathematics, poems, and trivia use `out_of_scope`. The backend discards the model's answer and returns a fixed Indonesian scope reminder with `requires_human=false` and `confidence=null`. This uses the existing single generation on the normal path; no separate classifier call is added.
 
 Mixed requests should answer only the product-related portion and decline the rest. Missing product facts still use `unknown` and recommend human support. Classification and mixed-answer compliance depend on the model; the fixed reply applies only when it selects `out_of_scope`. Restart the server to load the new prompt.
 
@@ -128,11 +149,29 @@ For a different dataset, put it in the ignored `knowledge/local/` directory and 
 SAAS_KNOWLEDGE_FILE=knowledge/local/my-saas.md
 ```
 
-Relative paths resolve from the project root; absolute paths are also supported. An explicitly configured file must exist; a typo stops startup rather than silently loading the demo. Files elsewhere in the repository need their own ignore rules. Restart the server after changing the file or setting. Knowledge is sent to your selected model provider, even though Git ignores the local file. The current prompt and UI still identify this stage as fictional demo data.
+Relative paths resolve from the project root; absolute paths are also supported. An explicitly configured file must exist; a typo stops startup rather than silently loading the demo. Files elsewhere in the repository need their own ignore rules. Re-ingest and restart the server after changing the file or embedding settings. Knowledge is sent to your selected model provider, even though Git ignores the local file. Use `SAAS_NAME` for the displayed product name; set `SAAS_BRAND_FILE=prompts/local/brand.txt` for server-owned tone rules. The ignored `prompts/local/` directory keeps those custom rules local. Document facts belong in the knowledge file; communication rules should not be retrieved as evidence.
 
-Edit [prompts/support-v4.txt](prompts/support-v4.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
+Edit [prompts/support-v5.txt](prompts/support-v5.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
 
-The whole knowledge file is included in each request. This is direct context injection, with no search, embeddings, database, tools, or persistent memory. Retrieval begins in Step 03.
+## Step 03: first text RAG
+
+- **Embeddings:** Fireworks `fireworks/qwen3-embedding-8b`, 512 dimensions by default, using the same Fireworks key. A separate client handles embeddings even if chat uses OpenAI. Qwen's query instruction prefix is applied to queries only. Returned vectors are normalized and dimensions checked.
+- **Storage:** standard-library SQLite stores chunk text, normalized vectors, and source/model metadata. Retrieval scans the small index with exact cosine similarity; no vector extension, LangChain, or new runtime dependency is required.
+- **Chunking:** Markdown heading paths, parent introductions, and paragraph-aware pieces up to 1,800 body characters. IDs remain stable for an unchanged path/heading/part; SHA-256 document versions change when content changes. Explicit plan inheritance links expand relevant plan evidence.
+- **Retrieval:** search text contains the current question, up to two recent user messages, and a bounded summary excerpt. Previous assistant answers are not added to the search query. This is a simple heuristic, not a standalone-query rewriting model.
+- **Budget:** top three similarity candidates (minimum cosine 0.30), expanded to at most six passages and 8,500 serialized context characters. A threshold is a retrieval heuristic, not calibrated confidence. Missing context should lead to abstention; similar text does not prove an answer exists.
+- **Freshness:** changed source hashes, model/dimension changes, missing/corrupt indexes, or empty knowledge require re-ingestion. The app checks document freshness before retrieval; restart after rebuilding the index.
+- **Scope:** text-only support knowledge; SQLite here is an index, not a customer database. No tools, account lookup, durable conversation store, or live business records were added.
+
+Representative questions and expected sources are in [steps/03-retrieval-examples.json](steps/03-retrieval-examples.json). Inspect your selected index with:
+
+```sh
+.venv/bin/python -m app.evaluate_retrieval
+```
+
+The worksheet targets the local Jagel corpus; some questions do not apply to the smaller fictional fixture. Source recall is assessed separately from answer correctness and abstention. Compare retrieved-context size, answer quality, latency, and actual provider token usage against the former full-context baseline before claiming cost savings. For a very small file, metadata and retrieval overhead can outweigh savings.
+
+Official references: [Fireworks embeddings](https://docs.fireworks.ai/guides/querying-embeddings-models), [Qwen3 embeddings](https://huggingface.co/Qwen/Qwen3-Embedding-8B), and [Python SQLite](https://docs.python.org/3/library/sqlite3.html).
 
 ## Verify
 
@@ -142,19 +181,21 @@ The whole knowledge file is included in each request. This is direct context inj
 node --test tests/history.test.cjs
 ```
 
-The 152 backend cases exercise the real OpenAI SDK with simulated HTTP responses. They cover both provider paths, make no paid calls and ignore your `.env` and API key. Coverage includes requests with and without history, history roles/order/size limits, retry preservation, rolling summaries, failed/refused/invalid summary generation, summary input limits, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, schema-invalid JSON, bounded recovery, refusals, and private-file access.
+The backend checks exercise the real OpenAI SDK with simulated HTTP responses. They cover both provider paths, make no paid calls and ignore your `.env` and API key. Coverage includes requests with and without history, history roles/order/size limits, retry preservation, rolling summaries, failed/refused/invalid summary generation, summary input limits, blank/oversized input, missing keys, provider errors, timeouts, empty/incomplete replies, schema-invalid JSON, bounded recovery, refusals, and private-file access.
 
 Browser verification covered the missing-key message and retry behavior, a simulated-provider round trip, and a live Fireworks refund question with a human-support recommendation. HTML-containing output stayed plain text, and Clear chat removed response metadata. Four live Step 02 API spot checks covered pricing, unknown refunds, missing orders, and unavailable cancellation. Use the [Step 02 examples and completion notes](steps/02-structured-instructions.md) to compare live model behavior with the contract; the [Step 01 baseline](steps/01-baseline.md) preserves the original stage’s observations.
 
-The four frontend tests run the actual chat script with a simulated DOM and provider responses. They cover compaction before chat, rolling updates, preservation on summary failure, chat retry after compaction, UTF-8 size triggers, and reset behavior. They use Node’s built-in test runner; no frontend dependencies are installed.
+The five frontend tests run the actual chat script with a simulated DOM and provider responses. They cover compaction before chat, rolling updates, preservation on summary failure, chat retry after compaction, UTF-8 size triggers, reset behavior, and citation text display. They use Node’s built-in test runner; no frontend dependencies are installed.
 
 ## Files to read first
 
-- `app/main.py` — prompt loading, provider lifecycle, structured generation, retries, and chat endpoint.
+- `app/main.py` — retrieval, provider lifecycle, structured generation, and citation validation.
+- `app/rag.py` — chunking, embedding configuration, SQLite ingestion, and cosine retrieval.
+- `app/ingest.py` — repeatable local ingestion command.
 - `app/schemas.py` — response contract and validated fallback.
 - `app/memory.py` — shared memory limits, validation, size heuristic, and selection of older exchanges.
 - `prompts/summarize-v1.txt` — summary update instructions.
-- `prompts/support-v4.txt` — versioned behavior rules.
+- `prompts/support-v5.txt` — versioned behavior rules.
 - `knowledge/mock-saas.example.md` — committed fictional example; `knowledge/mock-saas.md` is your ignored local copy.
 - `app/static/index.html` — chat page structure.
 - `app/static/chat.js` — send, render, clear, and retry behavior.
@@ -169,7 +210,7 @@ Official references: [Fireworks OpenAI compatibility](https://docs.fireworks.ai/
 | --- | --- | --- |
 | 01 | [Ordinary chatbot](steps/01-ordinary-chatbot.md) | Implemented; live UI connection verified during Step 02 |
 | 02 | [Structured instructions and outputs](steps/02-structured-instructions.md) | Implemented; mock knowledge and validated replies |
-| 03 | [First text RAG](steps/03-first-rag.md) | Not started |
+| 03 | [First text RAG](steps/03-first-rag.md) | Implemented; fixture and custom knowledge verified |
 | 04 | [Improve retrieval](steps/04-better-retrieval.md) | Not started |
 | 05 | [Multimodal RAG](steps/05-multimodal-rag.md) | Not started |
 | 06 | [Read-only database tools](steps/06-database-tools.md) | Not started |

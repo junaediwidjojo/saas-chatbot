@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+MAX_CITATIONS = 6
+
 
 class AssistantResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -15,6 +17,7 @@ class AssistantResponse(BaseModel):
     answer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
     requires_human: bool
     confidence: Annotated[float | None, Field(ge=0, le=1)] = None
+    citation_ids: Annotated[list[str], Field(max_length=MAX_CITATIONS)] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def require_escalation(self):
@@ -28,6 +31,28 @@ class AssistantResponse(BaseModel):
 ASSISTANT_JSON_SCHEMA = AssistantResponse.model_json_schema()
 ASSISTANT_JSON_SCHEMA["required"] = list(ASSISTANT_JSON_SCHEMA["properties"])
 ASSISTANT_JSON_SCHEMA["properties"]["confidence"].pop("default", None)
+
+
+class SourceCitation(BaseModel):
+    id: str
+    title: str
+    section: str
+    version: str
+
+
+class ChatResponse(AssistantResponse):
+    citations: list[SourceCitation] = Field(default_factory=list)
+
+
+def cited_response(reply: AssistantResponse, chunks) -> ChatResponse | None:
+    by_id = {chunk.id: chunk for chunk in chunks}
+    if any(cid not in by_id for cid in reply.citation_ids) or len(set(reply.citation_ids)) != len(reply.citation_ids):
+        return None
+    if reply.intent in {"product", "pricing", "policy"} and not reply.citation_ids:
+        return None
+    citations = [SourceCitation(id=cid, title=by_id[cid].title, section=by_id[cid].section, version=by_id[cid].version)
+                 for cid in reply.citation_ids]
+    return ChatResponse(**reply.model_dump(), citations=citations)
 
 
 def fallback_response() -> AssistantResponse:

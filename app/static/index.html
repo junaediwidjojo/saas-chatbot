@@ -13,13 +13,13 @@
     <main class="shell">
       <header class="masthead">
         <a class="brand" href="/" aria-label="SaaS chatbot home">saas<span>●</span></a>
-        <span class="edition">THE LEARNING SERIES / 02</span>
+        <span class="edition">THE LEARNING SERIES / 03</span>
       </header>
 
       <section class="intro" aria-labelledby="title">
         <p class="eyebrow">A LITTLE HELP, RIGHT HERE</p>
         <h1 id="title">Hello. How can<br>we help?</h1>
-        <p class="description">Explore CloudDesk’s fictional plans and features. All company information here is demo data.</p>
+        <p class="description">Ask about the configured product. Answers use selected knowledge passages and show supporting sources.</p>
       </section>
 
       <section class="chat-card" aria-label="Chat with support">
@@ -28,11 +28,11 @@
           <button id="clear" class="text-button" type="button">Clear chat</button>
         </div>
         <div id="messages" class="messages" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions">
-          <article class="message assistant"><p class="speaker">ASSISTANT</p><p class="bubble">Hi! I can help with CloudDesk’s fictional demo plans and features. What would you like to know?</p></article>
+          <article class="message assistant"><p class="speaker">ASSISTANT</p><p class="bubble" id="welcome">Hi! What would you like to know about the product?</p></article>
         </div>
         <div class="suggestions" aria-label="Example questions">
-          <button type="button" data-question="What are the CloudDesk plans and prices?">Explore demo plans <span aria-hidden="true">↗</span></button>
-          <button type="button" data-question="What is your refund policy?">Ask about refunds <span aria-hidden="true">↗</span></button>
+          <button type="button" data-question="Paket apa saja yang tersedia dan apa bedanya?">Explore plans <span aria-hidden="true">↗</span></button>
+          <button type="button" data-question="Apa kebijakan refund umum?">Ask about refunds <span aria-hidden="true">↗</span></button>
         </div>
         <form id="chat-form">
           <label class="sr-only" for="message">Your message</label>
@@ -45,7 +45,7 @@
         </form>
       </section>
 
-      <footer><span class="footnote-mark" aria-hidden="true">✳</span><p>Fictional demo knowledge only. Account lookup and account changes aren’t connected.<br>Recent exchanges and a summary of earlier messages provide context. Clear chat or refresh resets both.</p></footer>
+      <footer><span class="footnote-mark" aria-hidden="true">✳</span><p>Answers depend on the selected knowledge. Account lookup and account changes aren’t connected.<br>Recent exchanges and a summary of earlier messages provide context. Clear chat or refresh resets both.</p></footer>
     </main>
   </body>
 </html>

@@ -13,6 +13,7 @@ const assistantResponses = [];
 const conversationHistory = [];
 let conversationSummary = '';
 let memoryLimits = null;
+let productName = 'our product';
 
 function rememberExchange(question, answer) {
   conversationHistory.push({ role: 'user', content: question }, { role: 'assistant', content: answer });
@@ -68,6 +69,13 @@ function addMessage(role, text, response = null) {
   // Treat both customer input and model output as text, never executable HTML.
   bubble.textContent = text;
   article.append(speaker, bubble);
+  if (response && Array.isArray(response.citations) && response.citations.length) {
+    const sources = document.createElement('p');
+    sources.className = 'source-note';
+    sources.textContent = 'Sources: ' + response.citations.map(citation =>
+      `${citation.section} (version ${citation.version.slice(0, 8)})`).join('; ');
+    article.append(sources);
+  }
   if (response) {
     article.dataset.intent = response.intent;
     if (response.requires_human) {
@@ -155,7 +163,7 @@ clear.addEventListener('click', () => {
   conversationHistory.length = 0;
   conversationSummary = '';
   messages.replaceChildren();
-  addMessage('assistant', 'Hi! I can help with CloudDesk’s fictional demo plans and features. What would you like to know?');
+  addMessage('assistant', `Hi! I can help with ${productName}. What would you like to know?`);
   input.value = '';
   input.setCustomValidity('');
   error.hidden = true;
@@ -168,7 +176,16 @@ async function checkConfiguration() {
     if (!response.ok) throw new Error();
     const health = await response.json();
     memoryLimits = health.memory_limits;
+    productName = health.product_name || 'our product';
+    document.querySelector('.description').textContent = `Ask about ${productName}. Answers use the selected knowledge and show supporting sources.`;
+    const welcome = document.querySelector('#welcome');
+    if (welcome) welcome.textContent = `Hi! I can help with ${productName}. What would you like to know?`;
     idleStatus = health.configured ? 'Ready for a question' : 'Setup needed';
+    if (health.configured && health.rag_ready === false) {
+      idleStatus = 'Knowledge setup needed';
+      error.textContent = 'The knowledge index needs setup or refresh. See the README for ingestion instructions.';
+      error.hidden = false;
+    }
     if (!health.configured) {
       error.textContent = 'Add your provider API key to .env and restart the server to begin.';
       error.hidden = false;

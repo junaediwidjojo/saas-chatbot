@@ -27,6 +27,7 @@ strong { font-size: 13px; font-weight: 650; }
 .message { max-width: 85%; margin: 0 0 20px; }
 .speaker { font-size: 9px; letter-spacing: 1.2px; color: #637265; margin: 0 0 7px; font-weight: 650; }
 .support-note { font-size: 11px; line-height: 1.5; color: #687363; margin: 8px 0 0; }
+.source-note { font-size: 11px; line-height: 1.5; color: #4d6050; margin: 8px 0 0; overflow-wrap: anywhere; }
 .bubble { border-radius: 0 12px 12px 12px; background: #f0f3e9; padding: 13px 16px; font-size: 14px; line-height: 1.55; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .user { margin-left: auto; }
 .user .speaker { text-align: right; }

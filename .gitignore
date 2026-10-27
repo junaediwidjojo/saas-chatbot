@@ -10,3 +10,5 @@ __pycache__/
 # Local knowledge; only the example dataset belongs in Git.
 /knowledge/mock-saas.md
 /knowledge/local/
+/prompts/local/
+/.rag/

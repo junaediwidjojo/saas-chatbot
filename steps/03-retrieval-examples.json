@@ -1,0 +1,10 @@
+[
+  {"question":"Berapa harga paket Silver?", "expected_sections":["Paket Silver"]},
+  {"question":"Apakah Gold punya fitur formulir?", "expected_sections":["Paket Gold", "Paket Silver"]},
+  {"question":"Apakah remote support gratis untuk Platinum?", "expected_sections":["Remote"]},
+  {"question":"Bagaimana mengatur tarif awal ojek online?", "expected_sections":["Ojek Online"]},
+  {"question":"Bagaimana mengatur login Google Firebase?", "expected_sections":["Firebase"]},
+  {"question":"Bagaimana menangani transfer tanpa kode unik?", "expected_sections":["Transfer"]},
+  {"question":"Apakah ada uptime SLA 99.99 persen?", "expected_sections":[], "expected_behavior":"Abstain unless an explicit SLA is retrieved."},
+  {"question":"Apa kebijakan refund umum?", "expected_sections":[], "expected_behavior":"Do not generalize the incorrect-transfer procedure into a general refund policy."}
+]
