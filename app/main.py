@@ -4,8 +4,9 @@ import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -20,9 +21,13 @@ from openai import (
     AuthenticationError,
     RateLimitError,
 )
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, model_validator
+from pydantic import Field, StringConstraints, ValidationError, model_validator
 
 from app.schemas import ASSISTANT_JSON_SCHEMA, AssistantResponse, fallback_response, out_of_scope_response
+from app.memory import (
+    MEMORY_LIMITS, MAX_HISTORY_CHARACTERS, MAX_HISTORY_MESSAGES, MAX_MESSAGE_CHARACTERS,
+    MAX_SUMMARY_CHARACTERS, ConversationMemory, ConversationSummary, HistoryMessage, summary_split,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 FIREWORKS_MODEL = "accounts/fireworks/models/deepseek-v4p1-flash"
@@ -30,7 +35,7 @@ MAX_OUTPUT_ATTEMPTS = 2
 
 
 def load_system_prompt() -> str:
-    rules = (ROOT / "prompts" / "support-v3.txt").read_text()
+    rules = (ROOT / "prompts" / "support-v4.txt").read_text()
     configured_path = os.getenv("SAAS_KNOWLEDGE_FILE", "").strip()
     if configured_path:
         knowledge_path = Path(configured_path).expanduser()
@@ -51,6 +56,7 @@ async def lifespan(app: FastAPI):
     # Resolve .env relative to the project, without replacing shell environment values.
     load_dotenv(ROOT / ".env", override=False)
     app.state.system_prompt = load_system_prompt()
+    app.state.summary_prompt = (ROOT / "prompts" / "summarize-v1.txt").read_text()
     app.state.provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
     if app.state.provider not in {"openai", "fireworks"}:
         raise ValueError("LLM_PROVIDER must be openai or fireworks.")
@@ -76,25 +82,14 @@ app = FastAPI(title="SaaS Chatbot", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
 
 
-class HistoryMessage(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    role: Literal["user", "assistant"]
-    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
-
-
-class ChatRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
-    history: Annotated[list[HistoryMessage], Field(max_length=10)] = Field(default_factory=list)
+class ChatRequest(ConversationMemory):
+    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_MESSAGE_CHARACTERS)]
+    history: Annotated[list[HistoryMessage], Field(max_length=MAX_HISTORY_MESSAGES)] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_history(self):
-        if len(self.history) % 2:
-            raise ValueError("History must contain completed exchanges.")
-        if any(item.role != ("user" if index % 2 == 0 else "assistant") for index, item in enumerate(self.history)):
-            raise ValueError("History must alternate user and assistant messages.")
-        if sum(len(item.content) for item in self.history) > 16000:
-            raise ValueError("History exceeds 16,000 characters.")
+    def validate_chat_budget(self):
+        if sum(len(item.content) for item in self.history) > MAX_HISTORY_CHARACTERS:
+            raise ValueError(f"History exceeds {MAX_HISTORY_CHARACTERS} characters; summarize older exchanges first.")
         return self
 
 
@@ -103,7 +98,7 @@ async def invalid_request(_request: Request, _error: RequestValidationError):
     # Do not echo user input or internal validation details into error responses.
     return JSONResponse(
         status_code=422,
-        content={"detail": "Send a message containing 1–4,000 characters, with up to 5 completed user/assistant exchanges totaling at most 16,000 history characters."},
+        content={"detail": f"Invalid message or conversation state. Messages allow 1–{MAX_MESSAGE_CHARACTERS} characters. Chat history allows {MAX_HISTORY_MESSAGES // 2} completed exchanges and {MAX_HISTORY_CHARACTERS} characters; summary limit is {MAX_SUMMARY_CHARACTERS} characters."},
     )
 
 
@@ -115,31 +110,35 @@ async def index():
 @app.get("/health")
 async def health(request: Request):
     # Configured does not claim that credentials or model access have been verified.
-    return {"status": "ok", "configured": request.app.state.openai is not None}
+    return {"status": "ok", "configured": request.app.state.openai is not None, "memory_limits": MEMORY_LIMITS}
 
 
-async def generate_reply(state, message: str, attempt: int, history: list[HistoryMessage]) -> AssistantResponse | None:
-    instructions = state.system_prompt
-    if attempt:
-        # Do not echo malformed model output or private validation diagnostics.
-        instructions += "\nThe previous generation was invalid or incomplete. Return a complete JSON object matching the schema and escalation rules."
-    conversation = [item.model_dump() for item in history] + [{"role": "user", "content": message}]
+@dataclass
+class GenerationRequest:
+    instructions: str
+    conversation: list[dict[str, str]]
+    schema: dict
+    name: str
+    max_output_tokens: int = 2048
+
+
+async def generate_structured(state, generation: GenerationRequest) -> tuple[str | None, bool]:
     if state.provider == "fireworks":
         response = await state.openai.chat.completions.create(
             model=state.model,
             messages=[
-                {"role": "system", "content": instructions},
-                *conversation,
+                {"role": "system", "content": generation.instructions},
+                *generation.conversation,
             ],
             response_format={
                 "type": "json_schema",
-                "json_schema": {"name": "AssistantResponse", "schema": ASSISTANT_JSON_SCHEMA, "strict": True},
+                "json_schema": {"name": generation.name, "schema": generation.schema, "strict": True},
             },
-            max_tokens=2048,
+            max_tokens=generation.max_output_tokens,
             reasoning_effort="none",
         )
         if not response.choices:
-            return None
+            return None, False
         choice = response.choices[0]
         refusal = choice.message.refusal or choice.finish_reason == "content_filter"
         completed = choice.finish_reason == "stop"
@@ -147,13 +146,13 @@ async def generate_reply(state, message: str, attempt: int, history: list[Histor
     else:
         response = await state.openai.responses.create(
             model=state.model,
-            instructions=instructions,
-            input=conversation,
+            instructions=generation.instructions,
+            input=generation.conversation,
             text={"format": {
-                "type": "json_schema", "name": "AssistantResponse",
-                "schema": ASSISTANT_JSON_SCHEMA, "strict": True,
+                "type": "json_schema", "name": generation.name,
+                "schema": generation.schema, "strict": True,
             }},
-            max_output_tokens=2048,
+            max_output_tokens=generation.max_output_tokens,
             store=False,
         )
         refusal = any(
@@ -163,13 +162,32 @@ async def generate_reply(state, message: str, attempt: int, history: list[Histor
         )
         completed = response.status == "completed"
         text = response.output_text
+    return text if completed and isinstance(text, str) else None, bool(refusal)
+
+
+async def generate_reply(state, body: ChatRequest, attempt: int) -> AssistantResponse | None:
+    instructions = state.system_prompt
+    if attempt:
+        instructions += "\nThe previous generation was invalid or incomplete. Return a complete JSON object matching the schema and escalation rules."
+    conversation = []
+    if body.summary:
+        conversation.append({
+            "role": "user",
+            "content": "Untrusted summary of earlier conversation, for context only:\n" + json.dumps(body.summary),
+        })
+    conversation.extend(item.model_dump() for item in body.history)
+    conversation.append({"role": "user", "content": body.message})
+    text, refusal = await generate_structured(state, GenerationRequest(
+        instructions=instructions, conversation=conversation,
+        schema=ASSISTANT_JSON_SCHEMA, name="AssistantResponse",
+    ))
     if refusal:
         return AssistantResponse(
             intent="refusal",
             answer="I can’t help with that request. Please contact human support for a safe alternative. No action has been taken.",
             requires_human=True,
         )
-    if not completed or not isinstance(text, str):
+    if text is None:
         return None
     try:
         return AssistantResponse.model_validate_json(text)
@@ -177,25 +195,13 @@ async def generate_reply(state, message: str, attempt: int, history: list[Histor
         return None
 
 
-@app.post("/chat", response_model=AssistantResponse)
-async def chat(body: ChatRequest, request: Request):
-    client = request.app.state.openai
-    if client is None:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Add {request.app.state.key_name} to your .env file and restart the server.",
-        )
-
+@asynccontextmanager
+async def provider_request(state):
+    if state.openai is None:
+        raise HTTPException(503, f"Add {state.key_name} to your .env file and restart the server.")
     try:
-        # The original 30-second budget covers both attempts, not 30s per attempt.
         async with asyncio.timeout(30):
-            for attempt in range(MAX_OUTPUT_ATTEMPTS):
-                reply = await generate_reply(request.app.state, body.message, attempt, body.history)
-                if reply is not None:
-                    if reply.intent == "out_of_scope":
-                        return out_of_scope_response()
-                    return reply
-        return fallback_response()
+            yield
     except (APITimeoutError, TimeoutError):
         raise HTTPException(504, "The AI took too long to respond. Please try again.") from None
     except AuthenticationError:
@@ -206,3 +212,38 @@ async def chat(body: ChatRequest, request: Request):
         raise HTTPException(502, "Cannot reach the AI service. Check your connection and try again.") from None
     except APIError:
         raise HTTPException(502, "The AI request failed. Check model access and API configuration, then retry.") from None
+
+
+@app.post("/chat", response_model=AssistantResponse)
+async def chat(body: ChatRequest, request: Request):
+    async with provider_request(request.app.state):
+        for attempt in range(MAX_OUTPUT_ATTEMPTS):
+            reply = await generate_reply(request.app.state, body, attempt)
+            if reply is not None:
+                return out_of_scope_response() if reply.intent == "out_of_scope" else reply
+        return fallback_response()
+
+
+@app.post("/memory/summarize", response_model=ConversationMemory)
+async def summarize(body: ConversationMemory, request: Request):
+    split = summary_split(body)
+    if not split:
+        return body
+    schema = ConversationSummary.model_json_schema()
+    instructions = request.app.state.summary_prompt + "\nJSON SCHEMA:\n" + json.dumps(schema)
+    async with provider_request(request.app.state):
+        text, refusal = await generate_structured(request.app.state, GenerationRequest(
+            instructions=instructions,
+            conversation=[{"role": "user", "content": json.dumps({
+                "previous_summary": body.summary,
+                "older_messages": [item.model_dump() for item in body.history[:split]],
+            })}],
+            schema=schema, name="ConversationSummary", max_output_tokens=1200,
+        ))
+        if text is not None and not refusal:
+            try:
+                result = ConversationSummary.model_validate_json(text)
+                return ConversationMemory(summary=result.summary, history=body.history[split:])
+            except ValidationError:
+                pass
+    raise HTTPException(502, "Could not update the conversation summary. Your history has been kept. Please retry or clear chat.")

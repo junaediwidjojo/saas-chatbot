@@ -1,6 +1,6 @@
 # Step 10 — Conversation memory
 
-Status: Not started
+Status: Durable memory not started; browser history and rolling summaries available
 
 ## Goal
 
@@ -18,7 +18,7 @@ Context budgets, summaries, structured state, persistence, freshness.
 
 - [ ] Add conversation IDs and persist recent messages with customer ownership.
 - [ ] Track relevant order and product references in structured state.
-- [ ] Use a bounded recent-message window plus summaries for longer conversations.
+- [x] Use a bounded recent-message window plus summaries for longer conversations. Implemented early on 2026-10-27 as browser-owned state; durable ownership and persistence remain pending.
 - [ ] Resolve “Can I cancel it?” from prior context and ask for clarification when references are ambiguous.
 - [ ] Re-fetch live order facts before answering time-sensitive questions or taking actions.
 - [ ] Keep pending confirmations in authoritative backend state; summaries cannot create approval or override authorization.
@@ -40,4 +40,4 @@ Basic message history may exist earlier; this step introduces durable, bounded m
 
 ## Completion notes
 
-Record implementation decisions, run commands, verification results, and remaining limitations here after building.
+Rolling summaries and bounded recent history were added early at the user’s request. See the 2026-10-27 notes in [Step 02](02-structured-instructions.md). This does not complete the durable-memory step: conversation IDs, customer ownership, persisted state, structured references, freshness checks, and authoritative confirmations remain unimplemented.

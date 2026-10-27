@@ -87,3 +87,16 @@ The refund question was also sent from the actual browser, where the answer and 
 - Verification: 114 backend tests pass across both providers, covering history forwarding/order, retry preservation, no server-side carryover, invalid roles, extra fields, malformed pairs, and boundary sizes.
 - Browser checks with simulated replies verified follow-up payloads, failed-request exclusion, retry without duplicates, five-exchange and character-limit trimming (including emoji), metadata exclusion, Clear chat, and refresh reset.
 - Live Fireworks browser spot check using the committed example: after asking the price of Team, “Berapa batas anggotanya?” correctly answered the Team member limit of 20. This verifies one follow-up, not general model accuracy.
+
+
+### Rolling conversation summaries — 2026-10-27
+
+- Added at the user's request using the existing SDK, without LangChain or new runtime dependencies. Active chat instructions: `support-v4`; summary instructions: `summarize-v1`.
+- Browser keeps an existing summary plus recent completed exchanges. Before the next chat, `/memory/summarize` compacts older messages when history exceeds five exchanges/16,000 characters or an estimated 3,000 tokens. The estimate is ceil(UTF-8 bytes / 3) over summary and recent messages only, not a model tokenizer or hard full-context token budget.
+- Shared backend constants in `app/memory.py` are supplied to the browser through `/health`. Summary limit: 2,000 characters. Compaction input limit: 12 messages/24,000 characters; chat limit remains 10 messages/16,000 characters. Each message is limited to 4,000 characters.
+- Compaction usually preserves the newest two exchanges verbatim, retaining at least one pair. Its separate generation combines previous summary and older messages, excludes SaaS knowledge, and preserves user goals, named plans, preferences, unresolved issues, and corrections as conversation claims. Summary generation makes one call, capped at 1,200 output tokens within 30 seconds.
+- Backend validates summary JSON before returning the new memory. The browser validates it and the unchanged history suffix before removing old pairs. On failure, it preserves history, summary, and draft. If compaction succeeds but chat fails, retry uses the successfully compacted state without duplicates.
+- Summary is added as labeled untrusted user-level context, never inserted into system instructions. It cannot establish policy, identity, approval, or completed actions. Loss or distortion of details is still possible.
+- Clear chat or refresh resets summary, recent history, and transcript. No server-side conversation state, persistence, conversation IDs, ownership/authentication, tools, or durable memory were added.
+- Verification: 152 backend checks and four frontend-script tests pass. Frontend tests use a simulated DOM; they are not full browser end-to-end tests.
+- Live Fireworks check with fictional data: summarized six exchanges to a summary plus the latest two exchanges. An early statement about 18 team members and monthly billing remained in the summary. A follow-up correctly recalled both as user-stated requirements (`product`, human support false), rather than claiming account verification. This is a spot check; summary fidelity is not guaranteed.

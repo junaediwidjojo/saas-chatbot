@@ -11,15 +11,50 @@ let idleStatus = 'Ready for a question';
 // Retain validated metadata for application logic; this is page-local, not model memory.
 const assistantResponses = [];
 const conversationHistory = [];
-const MAX_HISTORY_MESSAGES = 10;
-const MAX_HISTORY_CHARACTERS = 16000;
+let conversationSummary = '';
+let memoryLimits = null;
 
 function rememberExchange(question, answer) {
   conversationHistory.push({ role: 'user', content: question }, { role: 'assistant', content: answer });
-  while (conversationHistory.length > MAX_HISTORY_MESSAGES ||
-      conversationHistory.reduce((total, item) => total + Array.from(item.content).length, 0) > MAX_HISTORY_CHARACTERS) {
-    conversationHistory.splice(0, 2);
+}
+
+function needsSummary() {
+  const encoder = new TextEncoder();
+  const characters = conversationHistory.reduce((total, item) => total + Array.from(item.content).length, 0);
+  const bytes = encoder.encode(conversationSummary).length +
+    conversationHistory.reduce((total, item) => total + encoder.encode(item.content).length, 0);
+  const estimate = Math.ceil(bytes / memoryLimits.token_estimate_bytes);
+  return conversationHistory.length > memoryLimits.history_messages ||
+    characters > memoryLimits.history_characters || estimate > memoryLimits.summary_trigger_tokens;
+}
+
+async function updateSummary() {
+  if (!needsSummary() || conversationHistory.length < 4) return;
+  status.textContent = 'Updating conversation context…';
+  const response = await fetch('/memory/summarize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ summary: conversationSummary, history: conversationHistory }),
+    signal: AbortSignal.timeout(45000),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not update conversation context. Please retry.');
+  if (typeof data.summary !== 'string' || !data.summary.trim() ||
+      Array.from(data.summary).length > memoryLimits.summary_characters || !Array.isArray(data.history)) {
+    throw new Error('The summary format was invalid. Your history has been kept.');
   }
+  const remaining = data.history;
+  const removed = conversationHistory.length - remaining.length;
+  if (removed < 2 || removed % 2 !== 0 || remaining.length < 2 ||
+      remaining.length > memoryLimits.history_messages ||
+      remaining.some((item, index) => item.role !== conversationHistory[removed + index].role ||
+        item.content !== conversationHistory[removed + index].content) ||
+      remaining.reduce((total, item) => total + Array.from(item.content).length, 0) > memoryLimits.history_characters) {
+    throw new Error('The summary history was invalid. Your history has been kept.');
+  }
+  // Commit both pieces together only after the entire response has been checked.
+  conversationSummary = data.summary;
+  conversationHistory.splice(0, removed);
 }
 
 function addMessage(role, text, response = null) {
@@ -68,10 +103,15 @@ form.addEventListener('submit', async (event) => {
   input.value = '';
   setBusy(true);
   try {
+    await configurationReady;
+    if (!memoryLimits) await checkConfiguration();
+    if (!memoryLimits) throw new Error('Cannot load conversation settings. Check the server and retry.');
+    await updateSummary();
+    status.textContent = 'Thinking…';
     const response = await fetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, history: conversationHistory }),
+      body: JSON.stringify({ message, history: conversationHistory, summary: conversationSummary }),
       signal: AbortSignal.timeout(45000),
     });
     const data = await response.json();
@@ -113,6 +153,7 @@ suggestions.forEach((button) => button.addEventListener('click', () => {
 clear.addEventListener('click', () => {
   assistantResponses.length = 0;
   conversationHistory.length = 0;
+  conversationSummary = '';
   messages.replaceChildren();
   addMessage('assistant', 'Hi! I can help with CloudDesk’s fictional demo plans and features. What would you like to know?');
   input.value = '';
@@ -126,6 +167,7 @@ async function checkConfiguration() {
     const response = await fetch('/health', { signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw new Error();
     const health = await response.json();
+    memoryLimits = health.memory_limits;
     idleStatus = health.configured ? 'Ready for a question' : 'Setup needed';
     if (!health.configured) {
       error.textContent = 'Add your provider API key to .env and restart the server to begin.';
@@ -137,4 +179,4 @@ async function checkConfiguration() {
   if (!busy) status.textContent = idleStatus;
 }
 
-checkConfiguration();
+const configurationReady = checkConfiguration();
