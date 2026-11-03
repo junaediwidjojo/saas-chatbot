@@ -1,4 +1,4 @@
-"""Step 03: retrieve evidence, validate citations, and maintain bounded memory."""
+"""Retrieve measured evidence, validate citations, and maintain bounded memory."""
 
 import asyncio
 import json

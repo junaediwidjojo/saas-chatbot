@@ -1,0 +1,301 @@
+[
+  {
+    "question": "Berapa harga paket Silver?",
+    "expected_sections": [
+      "Paket Silver"
+    ],
+    "answer_groups": [
+      [
+        "silver"
+      ],
+      [
+        "175"
+      ]
+    ]
+  },
+  {
+    "question": "Apakah Gold punya fitur formulir?",
+    "expected_sections": [
+      "Paket Gold",
+      "Paket Silver"
+    ],
+    "answer_groups": [
+      [
+        "gold"
+      ],
+      [
+        "formulir"
+      ]
+    ]
+  },
+  {
+    "question": "Apakah remote support gratis untuk Platinum?",
+    "expected_sections": [
+      "Bimbingan Remote Live"
+    ],
+    "answer_groups": [
+      [
+        "platinum"
+      ],
+      [
+        "gratis"
+      ]
+    ]
+  },
+  {
+    "question": "Bagaimana mengatur tarif awal ojek online?",
+    "expected_sections": [
+      "Ojek Online"
+    ],
+    "answer_groups": [
+      [
+        "0"
+      ]
+    ]
+  },
+  {
+    "question": "Bagaimana mengatur login Google Firebase?",
+    "expected_sections": [
+      "Plugin Login Google"
+    ],
+    "answer_groups": [
+      [
+        "firebase"
+      ],
+      [
+        "google"
+      ]
+    ]
+  },
+  {
+    "question": "Bagaimana menangani transfer tanpa kode unik?",
+    "expected_sections": [
+      "SOP Salah Transfer"
+    ],
+    "answer_groups": [
+      [
+        "kode unik"
+      ],
+      [
+        "transfer"
+      ]
+    ]
+  },
+  {
+    "question": "Apakah ada uptime SLA 99.99 persen?",
+    "expected_sections": [],
+    "expected_behavior": "Abstain unless an explicit SLA is retrieved.",
+    "answer_groups": [],
+    "must_abstain": true
+  },
+  {
+    "question": "Apa kebijakan refund umum?",
+    "expected_sections": [],
+    "expected_behavior": "Do not generalize the incorrect-transfer procedure into a general refund policy.",
+    "answer_groups": [],
+    "must_abstain": true
+  },
+  {
+    "question": "Apa beda APK dan AAB?",
+    "expected_sections": [
+      "Dua Format"
+    ],
+    "answer_groups": [
+      [
+        "apk"
+      ],
+      [
+        "aab"
+      ]
+    ]
+  },
+  {
+    "question": "Dimana mengaktifkan menu driver?",
+    "expected_sections": [
+      "Paket Bronze"
+    ],
+    "answer_groups": [
+      [
+        "driver"
+      ],
+      [
+        "kanan atas"
+      ]
+    ]
+  },
+  {
+    "question": "Paket mana yang punya Heatmap Driver?",
+    "expected_sections": [
+      "Paket Gold"
+    ],
+    "answer_groups": [
+      [
+        "gold"
+      ]
+    ]
+  },
+  {
+    "question": "Bagaimana mengatur Authorized Domains Firebase?",
+    "expected_sections": [
+      "Plugin Login Google"
+    ],
+    "answer_groups": [
+      [
+        "authorized domains"
+      ]
+    ]
+  },
+  {
+    "question": "Bagaimana membatasi Google Maps API Key?",
+    "expected_sections": [
+      "MapKey Mandiri"
+    ],
+    "answer_groups": [
+      [
+        "pembatas",
+        "restriction",
+        "batasi"
+      ]
+    ]
+  },
+  {
+    "question": "Apa keuntungan White Label?",
+    "expected_sections": [
+      "Fungsi & Keuntungan White Label"
+    ],
+    "answer_groups": [
+      [
+        "logo"
+      ],
+      [
+        "email",
+        "domain",
+        "kontak"
+      ]
+    ]
+  },
+  {
+    "question": "Apakah saldo top-up driver seluruhnya keuntungan pemilik?",
+    "expected_sections": [
+      "Konsep Rekening"
+    ],
+    "answer_groups": [
+      [
+        "titipan"
+      ],
+      [
+        "komisi",
+        "potongan"
+      ]
+    ]
+  },
+  {
+    "question": "Apakah harus upload ulang setelah ganti logo?",
+    "expected_sections": [
+      "Kapan Harus"
+    ],
+    "answer_groups": [
+      [
+        "apk",
+        "compile",
+        "kompilasi"
+      ],
+      [
+        "ulang"
+      ]
+    ]
+  },
+  {
+    "question": "Bagaimana kalau APK menampilkan peringatan Play Protect?",
+    "expected_sections": [
+      "Dua Format"
+    ],
+    "answer_groups": [
+      [
+        "verifikasi",
+        "sumber"
+      ],
+      [
+        "teknis",
+        "support"
+      ]
+    ]
+  },
+  {
+    "question": "Paket mana mendukung Voice Call in-app?",
+    "expected_sections": [
+      "Paket Platinum"
+    ],
+    "answer_groups": [
+      [
+        "platinum"
+      ]
+    ]
+  },
+  {
+    "question": "Kalau paket itu, formulir sudah termasuk?",
+    "history": [
+      {
+        "role": "user",
+        "content": "Saya sedang mempertimbangkan paket Gold Jagel.app."
+      },
+      {
+        "role": "assistant",
+        "content": "Apa yang ingin Anda ketahui tentang paket tersebut?"
+      }
+    ],
+    "expected_sections": [
+      "Paket Gold",
+      "Paket Silver"
+    ],
+    "answer_groups": [
+      [
+        "gold"
+      ],
+      [
+        "formulir"
+      ]
+    ]
+  },
+  {
+    "question": "Bagaimana mendaftarkan domain web custom untuk login itu?",
+    "history": [
+      {
+        "role": "user",
+        "content": "Saya sedang mengatur login Google Firebase di Jagel.app."
+      },
+      {
+        "role": "assistant",
+        "content": "Bagian konfigurasi mana yang ingin Anda tanyakan?"
+      }
+    ],
+    "expected_sections": [
+      "Plugin Login Google"
+    ],
+    "answer_groups": [
+      [
+        "authorized domains"
+      ]
+    ]
+  },
+  {
+    "question": "Bagaimana menyiapkan layanan antar penumpang dengan tarif berdasarkan jarak?",
+    "expected_sections": [
+      "Ojek Online"
+    ],
+    "answer_groups": [
+      [
+        "kurir"
+      ],
+      [
+        "0"
+      ]
+    ]
+  },
+  {
+    "question": "Apakah ada jaminan pengembalian uang jika aplikasi saya kurang laku?",
+    "expected_sections": [],
+    "must_abstain": true,
+    "answer_groups": []
+  }
+]

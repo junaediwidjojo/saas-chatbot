@@ -1,4 +1,4 @@
-"""Small local vector index: Markdown sections, persisted vectors, exact cosine search."""
+"""Local knowledge index with vector, BM25, and hybrid retrieval."""
 
 import hashlib
 import json
@@ -13,9 +13,10 @@ from openai import AsyncOpenAI
 
 from app.knowledge import knowledge_path, project_path
 from app.schemas import MAX_CITATIONS
+from app.search import MAX_CONTEXT_CHARACTERS, KeywordIndex, SearchOptions, fuse
+from app.retrieval_assistant import RetrievalAssistant
 
 CHUNK_CHARACTERS = 1800
-MAX_CONTEXT_CHARACTERS = 8500
 MAX_PASSAGES = MAX_CITATIONS
 TOP_K = 3
 MIN_SIMILARITY = 0.30
@@ -202,9 +203,19 @@ async def ingest(config: RagConfig, embedder) -> dict:
 
 
 class Retriever:
-    def __init__(self, config: RagConfig, embedder):
+    def __init__(self, config: RagConfig, embedder, options: SearchOptions | None = None):
+        self.options = options or SearchOptions(
+            mode=os.getenv("RAG_SEARCH_MODE", "keyword"),
+            candidates=int(os.getenv("RAG_CANDIDATES", "10")),
+            top_k=int(os.getenv("RAG_TOP_K", str(TOP_K))),
+            rewrite=os.getenv("RAG_REWRITE", "false").lower() == "true",
+            rerank=os.getenv("RAG_RERANK", "false").lower() == "true",
+            max_passages=int(os.getenv("RAG_MAX_PASSAGES", str(MAX_PASSAGES))),
+            context_characters=int(os.getenv("RAG_CONTEXT_CHARACTERS", str(MAX_CONTEXT_CHARACTERS))),
+        )
         self.config = config
         self.embedder = embedder
+        self.assistant = RetrievalAssistant(embedder.client) if self.options.rewrite or self.options.rerank else None
         self.chunks = {}
         self.vectors = {}
         if not config.index.is_file():
@@ -222,16 +233,30 @@ class Retriever:
         except (sqlite3.Error, KeyError, TypeError, ValueError) as exc:
             raise RagUnavailable("Knowledge index is invalid. Re-ingest knowledge and restart the server.") from exc
         self.check_freshness()
+        self.keywords = KeywordIndex(self.chunks)
 
     def check_freshness(self):
         if not self.chunks or not self.config.source.is_file() or document_version(self.config.source) != self.version:
             raise RagUnavailable("Knowledge changed or is empty. Re-ingest knowledge and restart the server.")
 
-    async def retrieve(self, query: str) -> RetrievalResult:
+    async def rank(self, query: str) -> list[str]:
         self.check_freshness()
-        text = "Instruct: Given a SaaS support question, retrieve passages that answer it.\nQuery:" + query[:QUERY_CHARACTERS]
+        query = query[:QUERY_CHARACTERS]
+        if self.options.rewrite:
+            query = await self.assistant.rewrite(query)
+        keyword = self.keywords.rank(query)[:self.options.candidates]
+        if self.options.mode == "keyword":
+            return keyword
+        text = "Instruct: Given a SaaS support question, retrieve passages that answer it.\nQuery:" + query
         vector = (await self.embedder.embed([text]))[0]
-        ranked = sorted(self.chunks, key=lambda cid: sum(a * b for a, b in zip(vector, self.vectors[cid])), reverse=True)
+        scores = {cid: sum(a * b for a, b in zip(vector, stored)) for cid, stored in self.vectors.items()}
+        vector_rank = sorted(scores, key=lambda cid: (-scores[cid], cid))
+        vector_rank = [cid for cid in vector_rank if scores[cid] >= MIN_SIMILARITY][:self.options.candidates]
+        if self.options.mode == "vector":
+            return vector_rank
+        return fuse([vector_rank, keyword])[:self.options.candidates]
+
+    def select(self, ranked: list[str]) -> RetrievalResult:
         selected = []
         used_characters = 0
 
@@ -241,18 +266,25 @@ class Retriever:
                 return
             chunk = self.chunks[cid]
             size = len(json.dumps(asdict(chunk), ensure_ascii=False))
-            if len(selected) >= MAX_PASSAGES or used_characters + size > MAX_CONTEXT_CHARACTERS - 100:
+            if len(selected) >= self.options.max_passages or used_characters + size > self.options.context_characters - 100:
                 return
             selected.append(chunk)
             used_characters += size + 2
             for related in chunk.related_ids:
                 include(related)
 
-        for cid in ranked[:TOP_K]:
-            score = sum(a * b for a, b in zip(vector, self.vectors[cid]))
-            if score >= MIN_SIMILARITY:
-                include(cid)
+        for cid in ranked[:self.options.top_k]:
+            include(cid)
         return RetrievalResult(selected)
+
+    async def ranked_candidates(self, query: str) -> list[str]:
+        ranked = await self.rank(query)
+        if self.options.rerank:
+            return await self.assistant.rerank(query, [self.chunks[cid] for cid in ranked])
+        return ranked
+
+    async def retrieve(self, query: str) -> RetrievalResult:
+        return self.select(await self.ranked_candidates(query))
 
 
 def retrieval_query(body) -> str:

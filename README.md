@@ -2,7 +2,7 @@
 
 A staged AI engineering learning project: build a customer-support chatbot for a **SaaS company**, with fictional committed examples and optional local business knowledge, one concept at a time.
 
-Steps 01–03 are implemented with Python, FastAPI, a plain HTML/CSS/JavaScript frontend, and the official OpenAI SDK. Replies follow a validated contract and use retrieved passages from your selected knowledge file, with source citations. The committed examples are fictional; your local dataset can describe your own SaaS. SQLite is used only as the retrieval index; no customer database is connected. The Git repository is hosted at [junaediwidjojo/saas-chatbot](https://github.com/junaediwidjojo/saas-chatbot).
+Steps 01–04 are implemented with Python, FastAPI, a plain HTML/CSS/JavaScript frontend, and the official OpenAI SDK. Replies follow a validated contract and use retrieved passages from your selected knowledge file, with source citations. The committed examples are fictional; your local dataset can describe your own SaaS. SQLite is used only as the retrieval index; no customer database is connected. The Git repository is hosted at [junaediwidjojo/saas-chatbot](https://github.com/junaediwidjojo/saas-chatbot).
 
 ## How we will build it
 
@@ -211,7 +211,7 @@ Official references: [Fireworks OpenAI compatibility](https://docs.fireworks.ai/
 | 01 | [Ordinary chatbot](steps/01-ordinary-chatbot.md) | Implemented; live UI connection verified during Step 02 |
 | 02 | [Structured instructions and outputs](steps/02-structured-instructions.md) | Implemented; mock knowledge and validated replies |
 | 03 | [First text RAG](steps/03-first-rag.md) | Implemented; fixture and custom knowledge verified |
-| 04 | [Improve retrieval](steps/04-better-retrieval.md) | Not started |
+| 04 | [Improve retrieval](steps/04-better-retrieval.md) | Complete |
 | 05 | [Multimodal RAG](steps/05-multimodal-rag.md) | Not started |
 | 06 | [Read-only database tools](steps/06-database-tools.md) | Not started |
 | 07 | [Controlled tools and authorization](steps/07-tool-boundaries.md) | Not started |
@@ -242,3 +242,15 @@ Across the system: validation, authorization, traces, and evaluation.
 ```
 
 The step order follows the supplied learning plan. Authorization starts with the first database tool, and small verification examples accumulate from the first stage. Step 07 expands tool boundaries; step 11 turns those examples into a comprehensive evaluation system.
+
+## Step 04: measured retrieval improvements
+
+Vector, local BM25 keyword, and hybrid search are available. Optional Fireworks calls can rewrite the query or rerank candidates. All variants preserve original chunk metadata, citations, source checks, plan inheritance, and bounded evidence.
+
+**The measured default is keyword-only for the current small Jagel corpus**, with rewriting/reranking disabled. It matched the other improved variants on section recall and the answer-screening rubric, with the lowest measured latency/cost. This is a small worksheet, not a guarantee for unseen questions or other knowledge files. Keyword search does not require a query embedding call; vector/hybrid do.
+
+Configure `RAG_SEARCH_MODE=keyword|vector|hybrid`, `RAG_CANDIDATES=10`, `RAG_TOP_K=3`, `RAG_MAX_PASSAGES=6`, and `RAG_CONTEXT_CHARACTERS=8500`. Set `RAG_REWRITE=true` or `RAG_RERANK=true` for additional model calls. Defaults for both flags are false. Restart after edits; no re-ingestion is required.
+
+Run `.venv/bin/python -m app.compare_retrieval --answers` for the full five-variant comparison. It writes the detailed ignored `.rag/retrieval-comparison.json`, with generated answers, token usage, cost estimates, and uncached timings. Without `--answers`, it measures retrieval only (optional rewriting/reranking still make model calls). `--rescore` checks saved results against the current worksheet without API calls.
+
+Read [the aggregate results](steps/04-results.md) and [Step 04 implementation/limitations](steps/04-better-retrieval.md). A remaining driver-menu answer failure shows why retrieving the right source does not guarantee correct interpretation.
