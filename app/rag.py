@@ -11,7 +11,8 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
-from app.knowledge import knowledge_path, project_path
+from app.knowledge import knowledge_path, manuals_catalog_path, project_path
+from app.manuals import Catalog, CatalogError, extract_pages, load_catalog
 from app.schemas import MAX_CITATIONS
 from app.search import MAX_CONTEXT_CHARACTERS, KeywordIndex, SearchOptions, fuse
 from app.retrieval_assistant import RetrievalAssistant
@@ -22,7 +23,7 @@ TOP_K = 3
 MIN_SIMILARITY = 0.30
 EMBEDDING_BATCH_SIZE = 16
 QUERY_CHARACTERS = 1600
-CHUNKER_VERSION = "markdown-sections-v1"
+CHUNKER_VERSION = "markdown-sections-v1+pdf-pages-v1"
 
 
 class RagUnavailable(Exception):
@@ -35,6 +36,7 @@ class RagConfig:
     index: Path
     model: str
     dimensions: int
+    manuals: Path | None = None  # Product catalog; manuals are indexed beside the Markdown knowledge.
 
     @classmethod
     def from_environment(cls):
@@ -45,7 +47,8 @@ class RagConfig:
         static = project_path("app/static").resolve()
         if index == static or static in index.parents:
             raise ValueError("RAG_INDEX_FILE must be outside app/static.")
-        return cls(knowledge_path().resolve(), index, os.getenv("RAG_EMBEDDING_MODEL", "fireworks/qwen3-embedding-8b"), dimensions)
+        return cls(knowledge_path().resolve(), index, os.getenv("RAG_EMBEDDING_MODEL", "fireworks/qwen3-embedding-8b"),
+                   dimensions, manuals_catalog_path())
 
 
 @dataclass
@@ -56,6 +59,8 @@ class Chunk:
     text: str
     version: str
     related_ids: list[str]
+    page: int | None = None  # 1-based PDF page for manual passages.
+    product: str | None = None  # Catalog product ID for manual passages.
 
 
 @dataclass
@@ -68,6 +73,49 @@ class RetrievalResult:
 
 def document_version(source: Path) -> str:
     return hashlib.sha256(source.read_bytes()).hexdigest()
+
+
+def split_parts(content: str) -> list[str]:
+    parts = []
+    current = ""
+    for paragraph in content.split("\n\n"):
+        # Hard-split unusually long paragraphs; never omit a tail.
+        for offset in range(0, len(paragraph), CHUNK_CHARACTERS):
+            piece = paragraph[offset:offset + CHUNK_CHARACTERS]
+            if current and len(current) + len(piece) + 2 > CHUNK_CHARACTERS:
+                parts.append(current)
+                current = ""
+            current = (current + "\n\n" + piece).strip()
+    if current:
+        parts.append(current)
+    return parts
+
+
+def chunk_manuals(catalog: Catalog) -> tuple[list[Chunk], list[str]]:
+    """One or more chunks per readable PDF page; report pages that have no text layer."""
+    chunks, unreadable = [], []
+    for product in catalog.products.values():
+        if product.manual is None:
+            continue
+        version = hashlib.sha256(product.manual.read_bytes()).hexdigest()
+        source_id = hashlib.sha256(str(product.manual).encode()).hexdigest()[:10]
+        pages, missing = extract_pages(product.manual)
+        unreadable += [f"{product.manual.name} page {number}" for number in missing]
+        for page in pages:
+            for part, text in enumerate(split_parts(page.text)):
+                chunks.append(Chunk(f"{source_id}-p{page.number}-{part}", product.manual_title,
+                                    f"{product.manual_title} > Halaman {page.number}", text, version, [],
+                                    page.number, product.id))
+    return chunks, unreadable
+
+
+def manual_fingerprint(path: Path | None) -> str:
+    if path is None:
+        return ""
+    try:
+        return json.dumps(load_catalog(path).versions(), sort_keys=True)
+    except (CatalogError, OSError) as error:
+        raise RagUnavailable(f"Product manuals are unavailable: {error}") from error
 
 
 def chunk_document(source: Path) -> list[Chunk]:
@@ -105,19 +153,7 @@ def chunk_document(source: Path) -> list[Chunk]:
         occurrence = occurrences.get(path, 0)
         occurrences[path] = occurrence + 1
         section_id = hashlib.sha256(f"{path}:{occurrence}".encode()).hexdigest()[:10]
-        parts = []
-        current = ""
-        for paragraph in content.split("\n\n"):
-            # Hard-split unusually long paragraphs; never omit a tail.
-            for offset in range(0, len(paragraph), CHUNK_CHARACTERS):
-                piece = paragraph[offset:offset + CHUNK_CHARACTERS]
-                if current and len(current) + len(piece) + 2 > CHUNK_CHARACTERS:
-                    parts.append(current)
-                    current = ""
-                current = (current + "\n\n" + piece).strip()
-        if current:
-            parts.append(current)
-        for part, body_part in enumerate(parts):
+        for part, body_part in enumerate(split_parts(content)):
             chunks.append(Chunk(f"{source_id}-{section_id}-{part}", headings[0][1], path, body_part, version, []))
     # Keep inheritance explicit, rather than assuming vector similarity follows it.
     plans = {}
@@ -165,6 +201,15 @@ class FireworksEmbedder:
 
 async def ingest(config: RagConfig, embedder) -> dict:
     chunks = chunk_document(config.source)
+    version = chunks[0].version
+    manuals = manual_fingerprint(config.manuals)
+    unreadable = []
+    if config.manuals is not None:
+        try:
+            manual_chunks, unreadable = chunk_manuals(load_catalog(config.manuals))
+        except CatalogError as error:
+            raise RagUnavailable(f"Product manuals are unavailable: {error}") from error
+        chunks += manual_chunks
     config.index.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(config.index) as db:
         db.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -190,16 +235,17 @@ async def ingest(config: RagConfig, embedder) -> dict:
                 raise RagUnavailable("Embedding batch size mismatch.")
             for chunk, vector in zip(batch, encoded):
                 vectors[chunk.id] = json.dumps(normalize(vector, config.dimensions))
-        if document_version(config.source) != chunks[0].version:
+        if document_version(config.source) != version or manual_fingerprint(config.manuals) != manuals:
             raise RagUnavailable("Knowledge changed during ingestion. Please run ingestion again.")
         # Publish the entire snapshot together; a failed embedding leaves the old rows intact.
         db.execute("DELETE FROM chunks")
         db.executemany("INSERT INTO chunks VALUES (?,?,?)", [(c.id, json.dumps(asdict(c)), vectors[c.id]) for c in chunks])
         db.execute("DELETE FROM metadata")
         metadata = {"model":config.model, "dimensions":str(config.dimensions), "chunker":CHUNKER_VERSION,
-                    "source":str(config.source), "version":chunks[0].version}
+                    "source":str(config.source), "version":version, "manuals":manuals}
         db.executemany("INSERT INTO metadata VALUES (?,?)", metadata.items())
-    return {"chunks":len(chunks), "embedded":len(pending), "reused":len(chunks) - len(pending), "version":chunks[0].version}
+    return {"chunks":len(chunks), "embedded":len(pending), "reused":len(chunks) - len(pending), "version":version,
+            "manual_pages":len({(c.product, c.page) for c in chunks if c.page}), "pages_without_text":unreadable}
 
 
 class Retriever:
@@ -223,10 +269,12 @@ class Retriever:
         try:
             with sqlite3.connect(f"{config.index.as_uri()}?mode=ro", uri=True) as db:
                 metadata = dict(db.execute("SELECT key,value FROM metadata"))
-                expected = {"source":str(config.source), "model":config.model, "dimensions":str(config.dimensions), "chunker":CHUNKER_VERSION}
+                expected = {"source":str(config.source), "model":config.model, "dimensions":str(config.dimensions),
+                            "chunker":CHUNKER_VERSION, "manuals":manual_fingerprint(config.manuals)}
                 if any(metadata.get(key) != value for key, value in expected.items()):
                     raise RagUnavailable("RAG configuration changed. Re-ingest knowledge and restart the server.")
                 self.version = metadata["version"]
+                self.manuals = metadata["manuals"]
                 for cid, payload, vector in db.execute("SELECT id,payload,vector FROM chunks"):
                     self.chunks[cid] = Chunk(**json.loads(payload))
                     self.vectors[cid] = normalize(json.loads(vector), config.dimensions)
@@ -236,7 +284,8 @@ class Retriever:
         self.keywords = KeywordIndex(self.chunks)
 
     def check_freshness(self):
-        if not self.chunks or not self.config.source.is_file() or document_version(self.config.source) != self.version:
+        if (not self.chunks or not self.config.source.is_file() or document_version(self.config.source) != self.version
+                or manual_fingerprint(self.config.manuals) != self.manuals):
             raise RagUnavailable("Knowledge changed or is empty. Re-ingest knowledge and restart the server.")
 
     async def rank(self, query: str) -> list[str]:
@@ -283,8 +332,12 @@ class Retriever:
             return await self.assistant.rerank(query, [self.chunks[cid] for cid in ranked])
         return ranked
 
-    async def retrieve(self, query: str) -> RetrievalResult:
-        return self.select(await self.ranked_candidates(query))
+    async def retrieve(self, query: str, product: str | None = None) -> RetrievalResult:
+        ranked = await self.ranked_candidates(query)
+        if product:
+            # A known model must never borrow another model's manual instructions.
+            ranked = [cid for cid in ranked if self.chunks[cid].product in (None, product)]
+        return self.select(ranked)
 
 
 def retrieval_query(body) -> str:

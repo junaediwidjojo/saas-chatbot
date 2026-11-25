@@ -2,3 +2,9 @@ fastapi==0.141.1
 uvicorn==0.54.0
 openai==3.19.2
 python-dotenv==1.2.3
+# Step 05: PDF text/table extraction with page numbers (brings pdfminer.six, pypdfium2, cryptography).
+pdfplumber==0.11.11
+# Step 05: decode, bound, and re-encode uploaded photos (also a pdfplumber dependency).
+pillow==13.0.0
+# Step 05: FastAPI multipart form parsing for photo uploads.
+python-multipart==0.0.34

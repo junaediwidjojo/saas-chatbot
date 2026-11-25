@@ -28,9 +28,9 @@ function element() {
 async function browserHarness() {
   const nodes = new Map();
   const calls = [];
-  const state = { summaryFailure: false, chatFailure: false, invalidSummary: false, citations: [] };
+  const state = { summaryFailure: false, chatFailure: false, invalidSummary: false, citations: [], identification: null };
   const context = vm.createContext({
-    TextEncoder, AbortSignal,
+    TextEncoder, AbortSignal, FormData, File,
     document: {
       querySelector(selector) {
         if (!nodes.has(selector)) nodes.set(selector, element());
@@ -42,12 +42,15 @@ async function browserHarness() {
       createElement: element,
     },
     async fetch(url, options) {
-      const body = options?.body ? JSON.parse(options.body) : null;
+      const multipart = options?.body instanceof FormData;
+      const body = multipart
+        ? { ...JSON.parse(options.body.get('payload')), image: options.body.get('image') }
+        : options?.body ? JSON.parse(options.body) : null;
       const response = (ok, data) => ({ ok, async json() { return data; } });
       if (url === '/health') return response(true, { configured: true, memory_limits: {
         history_messages: 10, history_characters: 16000, summary_characters: 2000,
-        summary_trigger_tokens: 3000, token_estimate_bytes: 3,
-      } });
+        summary_trigger_tokens: 3000, token_estimate_bytes: 3, message_characters: 4000,
+      }, image_upload: { enabled: true, max_bytes: 5242880, types: ['image/png', 'image/jpeg', 'image/webp'] } });
       calls.push({ url, body });
       if (url === '/memory/summarize') {
         if (state.summaryFailure) return response(false, { detail: 'Summary unavailable; retry.' });
@@ -57,7 +60,8 @@ async function browserHarness() {
         });
       }
       if (state.chatFailure) return response(false, { detail: 'Chat unavailable; retry.' });
-      return response(true, { intent: 'product', answer: 'Displayed demo answer.', requires_human: false, confidence: null, citations: state.citations });
+      const reply = { intent: 'product', answer: 'Displayed demo answer.', requires_human: false, confidence: null, citations: state.citations };
+      return response(true, multipart ? { ...reply, identification: state.identification } : reply);
     },
   });
   vm.runInContext(source, context);
@@ -70,6 +74,17 @@ async function browserHarness() {
     },
     clear() {
       nodes.get('#clear').listeners.click();
+    },
+    choosePhoto(file) {
+      nodes.get('#photo').files = [file];
+      nodes.get('#photo').listeners.change();
+    },
+    node(selector) {
+      return nodes.get(selector);
+    },
+    notes(className) {
+      return nodes.get('#messages').children.flatMap(article => article.children)
+        .filter(child => child.className === className).map(child => child.textContent);
     },
     snapshot() {
       return JSON.parse(vm.runInContext('JSON.stringify({summary:conversationSummary, history:conversationHistory})', context));
@@ -152,4 +167,45 @@ test('citations are displayed as text and excluded from conversation memory', as
   assert.equal(app.snapshot().history[1].content, 'Displayed demo answer.');
   await app.send('What about Gold?');
   assert.deepEqual(Object.keys(app.calls.at(-1).body.history[1]).sort(), ['content', 'role']);
+});
+
+test('a photo is sent as multipart, noted in memory, and cleared only after success', async () => {
+  const app = await browserHarness();
+  const photo = new File([new Uint8Array([137, 80, 78, 71])], 'printer.png', { type: 'image/png' });
+  app.choosePhoto(photo);
+  assert.equal(app.node('#attachment').hidden, false);
+  app.state.chatFailure = true;
+  await app.send('');
+  assert.equal(app.calls.at(-1).url, '/chat/image');
+  assert.equal(app.node('#attachment').hidden, false); // Retry keeps the photo.
+  assert.equal(app.draft(), '');
+  app.state.chatFailure = false;
+  app.state.identification = { status: 'identified', product_name: 'DemoPrint TP-58', candidate_names: [], manual_available: true };
+  app.state.citations = [{ id: 'p2', title: 'Panduan DemoPrint TP-58', section: 'Panduan DemoPrint TP-58 > Halaman 2', version: 'abcdef012345', page: 2 }];
+  await app.send('Cara pairing?');
+  const request = app.calls.at(-1);
+  assert.equal(request.url, '/chat/image');
+  assert.equal(request.body.message, 'Cara pairing?');
+  assert.equal(request.body.image.name, 'printer.png');
+  assert.deepEqual(app.displayedSources(), ['Sources: Panduan DemoPrint TP-58, p. 2 (version abcdef01)']);
+  assert.match(app.notes('photo-note').join(' '), /Photo attached: printer\.png.*looks like DemoPrint TP-58/);
+  assert.equal(app.snapshot().history[0].content, 'Cara pairing?\n[Foto terlampir: dikenali sebagai DemoPrint TP-58]');
+  assert.equal(app.node('#attachment').hidden, true);
+  await app.send('Dan lampu merah?');
+  assert.equal(app.calls.at(-1).url, '/chat');
+});
+
+test('photo-only sends use a default question; unsupported files are refused locally', async () => {
+  const app = await browserHarness();
+  app.choosePhoto(new File(['%PDF'], 'manual.pdf', { type: 'application/pdf' }));
+  assert.equal(app.node('#attachment').hidden, true);
+  assert.match(app.node('#error').textContent, /PNG, JPEG, or WebP/);
+  app.state.identification = { status: 'ambiguous', candidate_names: ['DemoPrint TP-58', 'DemoPrint TP-80'] };
+  app.choosePhoto(new File(['x'], 'unclear.jpg', { type: 'image/jpeg' }));
+  await app.send('');
+  assert.match(app.calls.at(-1).body.message, /Produk apa ini/);
+  assert.match(app.snapshot().history[0].content, /model belum pasti — DemoPrint TP-58 atau DemoPrint TP-80/);
+  app.choosePhoto(new File(['x'], 'again.jpg', { type: 'image/jpeg' }));
+  app.clear();
+  assert.equal(app.node('#attachment').hidden, true);
 });

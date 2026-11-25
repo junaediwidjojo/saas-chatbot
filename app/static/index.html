@@ -13,13 +13,13 @@
     <main class="shell">
       <header class="masthead">
         <a class="brand" href="/" aria-label="SaaS chatbot home">saas<span>●</span></a>
-        <span class="edition">THE LEARNING SERIES / 03</span>
+        <span class="edition">THE LEARNING SERIES / 05</span>
       </header>
 
       <section class="intro" aria-labelledby="title">
         <p class="eyebrow">A LITTLE HELP, RIGHT HERE</p>
         <h1 id="title">Hello. How can<br>we help?</h1>
-        <p class="description">Ask about the configured product. Answers use selected knowledge passages and show supporting sources.</p>
+        <p class="description">Ask about the configured product, or attach a photo of a supported device. Answers use selected knowledge and manual pages and show supporting sources.</p>
       </section>
 
       <section class="chat-card" aria-label="Chat with support">
@@ -37,15 +37,18 @@
         <form id="chat-form">
           <label class="sr-only" for="message">Your message</label>
           <div class="composer">
-            <textarea id="message" name="message" rows="2" maxlength="4000" required placeholder="Type your question…" aria-describedby="input-hint"></textarea>
+            <button id="attach" class="attach-button" type="button" aria-label="Attach a product photo" title="Attach a product photo (PNG, JPEG, WebP · max 5 MB)">＋ Photo</button>
+            <input id="photo" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <textarea id="message" name="message" rows="2" maxlength="4000" placeholder="Type your question…" aria-describedby="input-hint"></textarea>
             <button id="send" type="submit">Send <span aria-hidden="true">↑</span></button>
           </div>
+          <div id="attachment" class="attachment" hidden><span id="attachment-name"></span><button id="remove-photo" class="text-button" type="button">Remove photo</button></div>
           <div class="composer-footer"><span id="input-hint">Enter to send · Shift + Enter for a new line</span><span id="status" role="status">Checking connection…</span></div>
           <p id="error" role="alert" hidden></p>
         </form>
       </section>
 
-      <footer><span class="footnote-mark" aria-hidden="true">✳</span><p>Answers depend on the selected knowledge. Account lookup and account changes aren’t connected.<br>Recent exchanges and a summary of earlier messages provide context. Clear chat or refresh resets both.</p></footer>
+      <footer><span class="footnote-mark" aria-hidden="true">✳</span><p>Answers depend on the selected knowledge. Account lookup and account changes aren’t connected.<br>Recent exchanges and a summary of earlier messages provide context. Clear chat or refresh resets both.<br>Photos are re-encoded without location data, sent to the AI provider for identification, and not stored.</p></footer>
     </main>
   </body>
 </html>

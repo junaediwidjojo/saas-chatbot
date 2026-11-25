@@ -2,7 +2,7 @@
 
 A staged AI engineering learning project: build a customer-support chatbot for a **SaaS company**, with fictional committed examples and optional local business knowledge, one concept at a time.
 
-Steps 01–04 are implemented with Python, FastAPI, a plain HTML/CSS/JavaScript frontend, and the official OpenAI SDK. Replies follow a validated contract and use retrieved passages from your selected knowledge file, with source citations. The committed examples are fictional; your local dataset can describe your own SaaS. SQLite is used only as the retrieval index; no customer database is connected. The Git repository is hosted at [junaediwidjojo/saas-chatbot](https://github.com/junaediwidjojo/saas-chatbot).
+Steps 01–05 are implemented with Python, FastAPI, a plain HTML/CSS/JavaScript frontend, and the official OpenAI SDK. Replies follow a validated contract and use retrieved passages from your selected knowledge file and product-manual PDFs, with source and page citations. A product photo can be attached; a vision model proposes which supported product it shows. The committed examples are fictional; your local dataset can describe your own SaaS. SQLite is used only as the retrieval index; no customer database is connected. The Git repository is hosted at [junaediwidjojo/saas-chatbot](https://github.com/junaediwidjojo/saas-chatbot).
 
 ## How we will build it
 
@@ -52,7 +52,7 @@ Before starting chat, build the selected knowledge index:
 .venv/bin/python -m app.ingest
 ```
 
-This sends the selected knowledge chunks to Fireworks for embeddings using `FIREWORKS_API_KEY`, and stores text/vectors locally in the ignored `.rag/` directory. Run it again after knowledge edits; unchanged chunks reuse embeddings, changed chunks are updated, and removed chunks disappear. Restart the server after ingestion. For a separate fictional-only trial, use:
+This sends the selected knowledge chunks and manual pages to Fireworks for embeddings using `FIREWORKS_API_KEY`, and stores text/vectors locally in the ignored `.rag/` directory. After upgrading to Step 05, run it once: indexes from Step 04 are rejected until re-ingested. Run it again after knowledge edits; unchanged chunks reuse embeddings, changed chunks are updated, and removed chunks disappear. Restart the server after ingestion. For a separate fictional-only trial, use:
 
 ```sh
 SAAS_KNOWLEDGE_FILE=knowledge/rag-example.md RAG_INDEX_FILE=.rag/example.sqlite3 .venv/bin/python -m app.ingest
@@ -68,6 +68,8 @@ Without a key, the interface still loads and shows a setup message. Once configu
 ## Try it
 
 For the DemoBuilder RAG fixture, ask “Apakah Gold punya fitur formulir?” and “Apa kebijakan refund langganan umum?” The first requires Gold inheritance plus Silver features; the second should acknowledge missing general refund information. For your local Jagel dataset, also try “Berapa harga paket Silver?”, “Bagaimana membuat ojek online?”, and “Apakah remote support gratis untuk Platinum?” The assistant has no private records or tools. Prompt instructions and a valid schema do not guarantee factual correctness.
+
+For Step 05, select **＋ Photo** and attach an image from [steps/05-sample-images/](steps/05-sample-images/), e.g. `tp58-labelled.png` with “Bagaimana cara menghubungkan Bluetooth printer ini?” (cited manual pages) or `printer-label-unreadable.png` (asks which model). Sending only a photo uses a default question.
 
 The UI offers sample questions, Enter to send, Shift+Enter for new lines, and Clear chat. A failed request restores your question so you can retry. The visible transcript, recent history, and rolling summary stay in page memory. Each chat request sends the latest question, a summary of older discussion when available, and recent completed exchanges. Clear chat or refresh resets all three. Failed HTTP requests do not enter history; successful fallback and scope reminders do, exactly as displayed.
 
@@ -129,7 +131,7 @@ Step 02 adds provider-enforced JSON schema output and strict Pydantic backend va
 
 ## Topic boundaries
 
-The active prompt is `support-v5`; earlier prompt versions are preserved for comparison. Greetings and SaaS support questions are allowed. Unrelated code, mathematics, poems, and trivia use `out_of_scope`. The backend discards the model's answer and returns a fixed Indonesian scope reminder with `requires_human=false` and `confidence=null`. This uses the existing single generation on the normal path; no separate classifier call is added.
+The active prompt is `support-v6`; earlier prompt versions are preserved for comparison. Greetings and SaaS support questions are allowed. Unrelated code, mathematics, poems, and trivia use `out_of_scope`. The backend discards the model's answer and returns a fixed Indonesian scope reminder with `requires_human=false` and `confidence=null`. This uses the existing single generation on the normal path; no separate classifier call is added.
 
 Mixed requests should answer only the product-related portion and decline the rest. Missing product facts still use `unknown` and recommend human support. Classification and mixed-answer compliance depend on the model; the fixed reply applies only when it selects `out_of_scope`. Restart the server to load the new prompt.
 
@@ -151,7 +153,7 @@ SAAS_KNOWLEDGE_FILE=knowledge/local/my-saas.md
 
 Relative paths resolve from the project root; absolute paths are also supported. An explicitly configured file must exist; a typo stops startup rather than silently loading the demo. Files elsewhere in the repository need their own ignore rules. Re-ingest and restart the server after changing the file or embedding settings. Knowledge is sent to your selected model provider, even though Git ignores the local file. Use `SAAS_NAME` for the displayed product name; set `SAAS_BRAND_FILE=prompts/local/brand.txt` for server-owned tone rules. The ignored `prompts/local/` directory keeps those custom rules local. Document facts belong in the knowledge file; communication rules should not be retrieved as evidence.
 
-Edit [prompts/support-v5.txt](prompts/support-v5.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
+Edit [prompts/support-v6.txt](prompts/support-v6.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
 
 ## Step 03: first text RAG
 
@@ -185,17 +187,21 @@ The backend checks exercise the real OpenAI SDK with simulated HTTP responses. T
 
 Browser verification covered the missing-key message and retry behavior, a simulated-provider round trip, and a live Fireworks refund question with a human-support recommendation. HTML-containing output stayed plain text, and Clear chat removed response metadata. Four live Step 02 API spot checks covered pricing, unknown refunds, missing orders, and unavailable cancellation. Use the [Step 02 examples and completion notes](steps/02-structured-instructions.md) to compare live model behavior with the contract; the [Step 01 baseline](steps/01-baseline.md) preserves the original stage’s observations.
 
-The five frontend tests run the actual chat script with a simulated DOM and provider responses. They cover compaction before chat, rolling updates, preservation on summary failure, chat retry after compaction, UTF-8 size triggers, reset behavior, and citation text display. They use Node’s built-in test runner; no frontend dependencies are installed.
+The seven frontend tests run the actual chat script with a simulated DOM and provider responses. They cover compaction before chat, rolling updates, preservation on summary failure, chat retry after compaction, UTF-8 size triggers, reset behavior, citation text display, multipart photo sending, and photo history notes. They use Node’s built-in test runner; no frontend dependencies are installed.
 
 ## Files to read first
 
 - `app/main.py` — retrieval, provider lifecycle, structured generation, and citation validation.
 - `app/rag.py` — chunking, embedding configuration, SQLite ingestion, and cosine retrieval.
 - `app/ingest.py` — repeatable local ingestion command.
-- `app/schemas.py` — response contract and validated fallback.
+- `app/schemas.py` — response contract, photo identification response, and validated fallback.
+- `app/manuals.py` — product catalog validation, PDF page/table extraction, model-number mentions.
+- `app/uploads.py` — photo type/size/dimension checks and metadata-stripping re-encode.
+- `app/vision.py` — identification contract, catalog validation, and fixed uncertain-photo replies.
+- `prompts/identify-v1.txt` — photo identification rules.
 - `app/memory.py` — shared memory limits, validation, size heuristic, and selection of older exchanges.
 - `prompts/summarize-v1.txt` — summary update instructions.
-- `prompts/support-v5.txt` — versioned behavior rules.
+- `prompts/support-v6.txt` — versioned behavior rules (v6 adds manuals and photos).
 - `knowledge/mock-saas.example.md` — committed fictional example; `knowledge/mock-saas.md` is your ignored local copy.
 - `app/static/index.html` — chat page structure.
 - `app/static/chat.js` — send, render, clear, and retry behavior.
@@ -212,7 +218,7 @@ Official references: [Fireworks OpenAI compatibility](https://docs.fireworks.ai/
 | 02 | [Structured instructions and outputs](steps/02-structured-instructions.md) | Implemented; mock knowledge and validated replies |
 | 03 | [First text RAG](steps/03-first-rag.md) | Implemented; fixture and custom knowledge verified |
 | 04 | [Improve retrieval](steps/04-better-retrieval.md) | Complete |
-| 05 | [Multimodal RAG](steps/05-multimodal-rag.md) | Not started |
+| 05 | [Multimodal RAG](steps/05-multimodal-rag.md) | Complete; fictional manuals and photos verified live |
 | 06 | [Read-only database tools](steps/06-database-tools.md) | Not started |
 | 07 | [Controlled tools and authorization](steps/07-tool-boundaries.md) | Not started |
 | 08 | [Combine RAG and tools](steps/08-rag-and-tools.md) | Not started |
@@ -254,3 +260,19 @@ Configure `RAG_SEARCH_MODE=keyword|vector|hybrid`, `RAG_CANDIDATES=10`, `RAG_TOP
 Run `.venv/bin/python -m app.compare_retrieval --answers` for the full five-variant comparison. It writes the detailed ignored `.rag/retrieval-comparison.json`, with generated answers, token usage, cost estimates, and uncached timings. Without `--answers`, it measures retrieval only (optional rewriting/reranking still make model calls). `--rescore` checks saved results against the current worksheet without API calls.
 
 Read [the aggregate results](steps/04-results.md) and [Step 04 implementation/limitations](steps/04-better-retrieval.md). A remaining driver-menu answer failure shows why retrieving the right source does not guarantee correct interpretation.
+
+## Step 05: manuals and product photos
+
+The committed fictional catalog in [knowledge/manuals/](knowledge/manuals/) has three PDF manuals (DemoPrint TP-58, DemoPrint TP-80, DemoScan BS-100) and one product without a manual (DemoCash CD-40). Ingestion indexes one chunk per PDF page, keeping page numbers and turning ruled tables into Markdown rows. Citations include the page.
+
+`POST /chat/image` accepts one PNG, JPEG, or WebP photo (5 MB max) plus the usual chat state. The server checks the real bytes, strips metadata, and downscales the photo. It then asks the vision model to choose from the catalog only. The backend validates that choice:
+
+- **Identified, with a manual:** retrieval uses only that model's manual pages, plus general knowledge.
+- **Ambiguous:** the bot asks for the model label and gives no steps.
+- **No manual, not supported, or unclear:** fixed replies.
+
+Typing a model number such as “TP-80” in a text question applies the same manual filter.
+
+The vision model defaults to the chat model (`deepseek-v4p1-flash` accepts images on Fireworks). Set `FIREWORKS_VISION_MODEL` or `OPENAI_VISION_MODEL` to change it, `SAAS_MANUALS_DIR` to use your own catalog folder, or `SAAS_MANUALS_DIR=` (empty) to disable manuals and photos. Re-ingest after any catalog or PDF change. Photos are sent to your provider and never stored.
+
+See [Step 05 notes](steps/05-multimodal-rag.md) for concepts, live results, and limitations.

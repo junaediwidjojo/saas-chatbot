@@ -38,10 +38,25 @@ class SourceCitation(BaseModel):
     title: str
     section: str
     version: str
+    page: int | None = None  # 1-based manual page; None for Markdown knowledge.
 
 
 class ChatResponse(AssistantResponse):
     citations: list[SourceCitation] = Field(default_factory=list)
+
+
+class ProductIdentification(BaseModel):
+    """Validated photo identification. Still a model proposal, never proof of the customer's device."""
+    status: Literal["identified", "ambiguous", "not_supported", "unclear_image"]
+    product_id: str | None = None
+    product_name: str | None = None
+    candidate_ids: list[str] = Field(default_factory=list)
+    candidate_names: list[str] = Field(default_factory=list)
+    manual_available: bool = False
+
+
+class PhotoChatResponse(ChatResponse):
+    identification: ProductIdentification | None  # None when identification failed or was refused.
 
 
 def cited_response(reply: AssistantResponse, chunks) -> ChatResponse | None:
@@ -50,7 +65,8 @@ def cited_response(reply: AssistantResponse, chunks) -> ChatResponse | None:
         return None
     if reply.intent in {"product", "pricing", "policy"} and not reply.citation_ids:
         return None
-    citations = [SourceCitation(id=cid, title=by_id[cid].title, section=by_id[cid].section, version=by_id[cid].version)
+    citations = [SourceCitation(id=cid, title=by_id[cid].title, section=by_id[cid].section,
+                                version=by_id[cid].version, page=by_id[cid].page)
                  for cid in reply.citation_ids]
     return ChatResponse(**reply.model_dump(), citations=citations)
 
@@ -59,6 +75,14 @@ def fallback_response() -> AssistantResponse:
     return AssistantResponse(
         intent="fallback",
         answer="I couldn’t produce a reliable reply. Please rephrase your question or contact human support. No action has been taken.",
+        requires_human=True,
+    )
+
+
+def refusal_response() -> ChatResponse:
+    return ChatResponse(
+        intent="refusal",
+        answer="I can’t help with that request. Please contact human support for a safe alternative. No action has been taken.",
         requires_human=True,
     )
 

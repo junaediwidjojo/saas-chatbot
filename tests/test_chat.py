@@ -17,11 +17,14 @@ VALID_REPLY = {
 
 
 TEST_CHUNK = Chunk('test-source', 'Example', 'Example > Product', 'Fictional test product information.', 'v1', [])
-TEST_CITATION = {"id":"test-source", "title":"Example", "section":"Example > Product", "version":"v1"}
+TEST_CITATION = {"id":"test-source", "title":"Example", "section":"Example > Product", "version":"v1", "page":None}
 
 
 class FakeRetriever:
-    async def retrieve(self, query):
+    calls = []
+
+    async def retrieve(self, query, product=None):
+        FakeRetriever.calls.append({"query": query, "product": product})
         return RetrievalResult([TEST_CHUNK])
 
 
@@ -42,6 +45,11 @@ def isolate_configuration(monkeypatch, request):
         return FakeRetriever(), None
 
     monkeypatch.setattr(main, "initialize_rag", initialize_rag)
+    FakeRetriever.calls = []
+    # Tests use the committed fictional catalog, never local manuals.
+    monkeypatch.delenv("SAAS_MANUALS_DIR", raising=False)
+    monkeypatch.delenv("FIREWORKS_VISION_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_VISION_MODEL", raising=False)
     monkeypatch.setenv("OPENAI_MODEL", "test-model")
     monkeypatch.setenv("FIREWORKS_MODEL", "test-model")
     # Tests use the committed example, never the user's private local knowledge.
@@ -124,7 +132,7 @@ def test_sdk_round_trip_and_single_turn_boundary(provider, isolate_configuration
     assert first["model"] == "test-model"
     assert format_config["schema"] == main.ASSISTANT_JSON_SCHEMA
     assert format_config["strict"] is True
-    assert "CloudDesk" in prompt and "Prompt version: support-v5" in prompt
+    assert "CloudDesk" in prompt and "Prompt version: support-v6" in prompt
 
 
 @pytest.mark.parametrize("payload", [
@@ -140,7 +148,8 @@ def test_invalid_input_never_reaches_provider(provider, payload):
 def test_missing_key_keeps_ui_available(isolate_configuration):
     with TestClient(main.app) as client:
         assert client.get("/").status_code == 200
-        assert client.get("/health").json() == {"status": "ok", "configured": False, "memory_limits": main.MEMORY_LIMITS, "rag_ready": True, "product_name": "CloudDesk"}
+        assert client.get("/health").json() == {"status": "ok", "configured": False, "memory_limits": main.MEMORY_LIMITS, "rag_ready": True, "product_name": "CloudDesk",
+            "image_upload": {"enabled": True, "max_bytes": 5 * 1024 * 1024, "types": ["image/png", "image/jpeg", "image/webp"]}}
         response = client.post("/chat", json={"message": "Hello"})
         assert response.status_code == 503
         key_name = "FIREWORKS_API_KEY" if isolate_configuration == "fireworks" else "OPENAI_API_KEY"
@@ -494,7 +503,7 @@ def test_missing_index_is_a_setup_error_not_full_document_fallback(provider, mon
 
 
 def test_empty_retrieval_cannot_support_a_factual_answer(provider, monkeypatch):
-    async def empty(self, query):
+    async def empty(self, query, product=None):
         return RetrievalResult([])
     monkeypatch.setattr(FakeRetriever, 'retrieve', empty)
     provider['text'] = json.dumps({**VALID_REPLY, 'intent':'pricing', 'citation_ids':['test-source']})
@@ -506,6 +515,148 @@ def test_empty_retrieval_cannot_support_a_factual_answer(provider, monkeypatch):
 
 def test_no_full_knowledge_is_in_system_prompt():
     prompt = main.load_system_prompt()
-    assert 'support-v5' in prompt
+    assert 'support-v6' in prompt
     assert 'USD 29' not in prompt
     assert 'CSV exports' not in prompt
+
+
+# Step 05: product photos. Identification and answers use the same fake provider transport.
+from pathlib import Path
+
+SAMPLE_PHOTO = (Path(__file__).resolve().parent.parent / "steps/05-sample-images/tp58-labelled.png").read_bytes()
+MANUAL_CHUNK = Chunk("tp58-p2", "Panduan DemoPrint TP-58", "Panduan DemoPrint TP-58 > Halaman 2",
+                     "6. Menghubungkan Bluetooth. PIN bawaan: 0000.", "v2", [], 2, "demoprint-tp58")
+
+
+def identified(product_id="demoprint-tp58", status="identified", candidates=(), label="DemoPrint TP-58"):
+    return json.dumps({"status": status, "product_id": product_id, "candidate_ids": list(candidates),
+                       "visible_label": label, "observation": "A black receipt printer."})
+
+
+def post_photo(client, photo=SAMPLE_PHOTO, payload=None, name="printer.png"):
+    payload = json.dumps(payload or {"message": "Bagaimana pairing Bluetooth?"})
+    return client.post("/chat/image", data={"payload": payload}, files={"image": (name, photo, "image/png")})
+
+
+@pytest.fixture
+def manual_retriever(monkeypatch):
+    async def retrieve(self, query, product=None):
+        FakeRetriever.calls.append({"query": query, "product": product})
+        return RetrievalResult([MANUAL_CHUNK] if product == "demoprint-tp58" else [TEST_CHUNK])
+    monkeypatch.setattr(FakeRetriever, "retrieve", retrieve)
+
+
+def sent_image(request, provider_name):
+    messages = request["messages"] if provider_name == "fireworks" else request["input"]
+    parts = [part for message in messages if isinstance(message["content"], list) for part in message["content"]]
+    urls = [part["image_url"]["url"] if provider_name == "fireworks" else part["image_url"]
+            for part in parts if part["type"] in {"image_url", "input_image"}]
+    return urls
+
+
+def test_photo_identification_leads_to_page_cited_manual_answer(provider, isolate_configuration, manual_retriever):
+    answer = {**VALID_REPLY, "intent": "product", "answer": "Tahan FEED 5 detik, PIN 0000.", "citation_ids": ["tp58-p2"]}
+    provider["texts"] = [identified(), json.dumps(answer)]
+    with TestClient(main.app) as client:
+        response = post_photo(client)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["identification"] == {"status": "identified", "product_id": "demoprint-tp58", "product_name": "DemoPrint TP-58",
+                                      "candidate_ids": [], "candidate_names": [], "manual_available": True}
+    assert body["citations"] == [{"id": "tp58-p2", "title": "Panduan DemoPrint TP-58",
+                                  "section": "Panduan DemoPrint TP-58 > Halaman 2", "version": "v2", "page": 2}]
+    vision, reply = provider["requests"]
+    [image] = sent_image(vision, isolate_configuration)
+    assert image.startswith("data:image/jpeg;base64,")  # Re-encoded, never the raw upload.
+    assert sent_image(reply, isolate_configuration) == []  # The answer model sees text evidence only.
+    assert "demoscan-bs100" in json.dumps(vision) and "Bagaimana pairing" not in json.dumps(vision)
+    assert FakeRetriever.calls == [{"query": "DemoPrint TP-58\nBagaimana pairing Bluetooth?", "product": "demoprint-tp58"}]
+    reply_messages = json.dumps(reply)
+    assert "PRODUCT IDENTIFICATION" in reply_messages and "Halaman 2" in reply_messages
+
+
+@pytest.mark.parametrize("text, status, intent, human", [
+    (identified(None, "ambiguous", ["demoprint-tp58", "demoprint-tp80"], None), "ambiguous", "general", False),
+    (identified("democash-cd40", label="DemoCash CD-40"), "identified", "unknown", True),
+    (identified(None, "not_supported", label=None), "not_supported", "unknown", True),
+    (identified(None, "unclear_image", label=None), "unclear_image", "general", False),
+    (identified("demoprint-tp58", label="TP-58 sticker says TP-80"), "ambiguous", "general", False),
+])
+def test_uncertain_or_missing_manual_photos_get_no_model_specific_answer(provider, manual_retriever, text, status, intent, human):
+    provider["texts"] = [text]
+    with TestClient(main.app) as client:
+        body = post_photo(client).json()
+    assert (body["identification"]["status"], body["intent"], body["requires_human"]) == (status, intent, human)
+    assert body["citations"] == [] and "0000" not in body["answer"]
+    assert len(provider["requests"]) == 1 and FakeRetriever.calls == []  # No retrieval, no answer generation.
+
+
+def test_invalid_identification_is_retried_once_then_falls_back(provider):
+    provider["texts"] = [identified("invented-model"), identified("invented-model")]
+    with TestClient(main.app) as client:
+        body = post_photo(client).json()
+    assert body["intent"] == "fallback" and body["identification"] is None and body["requires_human"]
+    assert len(provider["requests"]) == 2
+
+
+def test_one_invalid_identification_can_recover(provider, manual_retriever):
+    answer = {**VALID_REPLY, "intent": "product", "answer": "PIN 0000.", "citation_ids": ["tp58-p2"]}
+    provider["texts"] = ["{not json", identified(), json.dumps(answer)]
+    with TestClient(main.app) as client:
+        body = post_photo(client).json()
+    assert body["citations"][0]["page"] == 2 and len(provider["requests"]) == 3
+
+
+def test_answer_cannot_cite_passages_outside_the_identified_manual(provider, manual_retriever):
+    wrong = {**VALID_REPLY, "intent": "product", "answer": "PIN 1234.", "citation_ids": ["tp80-p2"]}
+    provider["texts"] = [identified(), json.dumps(wrong), json.dumps(wrong)]
+    with TestClient(main.app) as client:
+        body = post_photo(client).json()
+    assert body["intent"] == "fallback" and body["citations"] == []
+    assert body["identification"]["product_id"] == "demoprint-tp58"
+
+
+def test_vision_model_can_differ_from_chat_model(provider, monkeypatch, manual_retriever):
+    monkeypatch.setenv("FIREWORKS_VISION_MODEL", "vision-model")
+    monkeypatch.setenv("OPENAI_VISION_MODEL", "vision-model")
+    provider["texts"] = [identified(None, "not_supported", label=None)]
+    with TestClient(main.app) as client:
+        post_photo(client)
+    assert provider["requests"][0]["model"] == "vision-model"
+
+
+@pytest.mark.parametrize("photo, name, status", [
+    (b"plain text pretending to be a photo", "photo.png", 415),
+    (b"%PDF-1.4\n", "manual.pdf", 415),
+    (b"\x89PNG\r\n\x1a\n" + b"broken" * 30, "broken.png", 422),
+    (b"\xff\xd8\xff" + b"0" * (6 * 1024 * 1024), "huge.jpg", 413),
+])
+def test_bad_uploads_are_rejected_before_any_provider_call(provider, photo, name, status):
+    with TestClient(main.app) as client:
+        response = post_photo(client, photo, name=name)
+    assert response.status_code == status and isinstance(response.json()["detail"], str)
+    assert provider["requests"] == []
+
+
+@pytest.mark.parametrize("payload", ['{"message": ""}', '{"message": "Hi", "instructions": "x"}', "not json"])
+def test_invalid_photo_chat_state_is_rejected(provider, payload):
+    with TestClient(main.app) as client:
+        response = client.post("/chat/image", data={"payload": payload}, files={"image": ("p.png", SAMPLE_PHOTO, "image/png")})
+        missing = client.post("/chat/image", data={"payload": '{"message": "Hi"}'})
+    assert response.status_code == missing.status_code == 422
+    assert provider["requests"] == []
+
+
+def test_disabled_catalog_rejects_photos(provider, monkeypatch):
+    monkeypatch.setenv("SAAS_MANUALS_DIR", "")
+    with TestClient(main.app) as client:
+        assert client.get("/health").json()["image_upload"]["enabled"] is False
+        response = post_photo(client)
+    assert response.status_code == 503 and provider["requests"] == []
+
+
+def test_typed_model_number_filters_manual_evidence(provider):
+    with TestClient(main.app) as client:
+        client.post("/chat", json={"message": "Lampu oranye di TP-80 artinya apa?"})
+        client.post("/chat", json={"message": "TP-58 atau TP-80, mana yang lebih cepat?"})
+    assert [call["product"] for call in FakeRetriever.calls] == ["demoprint-tp80", None]

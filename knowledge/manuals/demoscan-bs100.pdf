@@ -1,0 +1,112 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [7 0 R 9 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Title (DemoScan BS-100 - Panduan Pengguna) /Producer (saas-chatbot fixture writer) >>
+endobj
+6 0 obj
+<< /Length 1661 >>
+stream
+0.5 w
+BT /F1 8 Tf 50 792 Td (DemoScan BS-100 | Pemindai barcode genggam | Panduan Pengguna v1.0) Tj ET
+50 773 m 545 773 l S
+BT /F2 13 Tf 50 745 Td (1. Ikhtisar) Tj ET
+BT /F1 10 Tf 50 725 Td (DemoScan BS-100 adalah pemindai barcode genggam untuk memasukkan kode produk ke aplikasi) Tj ET
+BT /F1 10 Tf 50 710 Td (kasir. Membaca barcode 1D dan QR. Contoh fiktif untuk latihan; bukan panduan produk nyata.) Tj ET
+BT /F2 13 Tf 50 685 Td (2. Spesifikasi) Tj ET
+50 659 180 20 re S
+BT /F2 9 Tf 55 665 Td (Item) Tj ET
+230 659 260 20 re S
+BT /F2 9 Tf 235 665 Td (Spesifikasi BS-100) Tj ET
+50 639 180 20 re S
+BT /F1 9 Tf 55 645 Td (Jenis kode) Tj ET
+230 639 260 20 re S
+BT /F1 9 Tf 235 645 Td (1D dan QR) Tj ET
+50 619 180 20 re S
+BT /F1 9 Tf 55 625 Td (Koneksi) Tj ET
+230 619 260 20 re S
+BT /F1 9 Tf 235 625 Td (Bluetooth 5.0 dan penerima USB 2.4 GHz) Tj ET
+50 599 180 20 re S
+BT /F1 9 Tf 55 605 Td (Jarak nirkabel) Tj ET
+230 599 260 20 re S
+BT /F1 9 Tf 235 605 Td (Hingga 10 m) Tj ET
+50 579 180 20 re S
+BT /F1 9 Tf 55 585 Td (Baterai) Tj ET
+230 579 260 20 re S
+BT /F1 9 Tf 235 585 Td (2000 mAh, sekitar 12 jam) Tj ET
+50 559 180 20 re S
+BT /F1 9 Tf 55 565 Td (Tahan jatuh) Tj ET
+230 559 260 20 re S
+BT /F1 9 Tf 235 565 Td (1,5 m) Tj ET
+BT /F2 13 Tf 50 537 Td (3. Menghubungkan Bluetooth) Tj ET
+BT /F1 10 Tf 58 517 Td (1. Tahan pelatuk hijau dan tombol samping bersamaan selama 5 detik.) Tj ET
+BT /F1 10 Tf 58 502 Td (2. Tunggu dua bunyi bip dan lampu biru berkedip.) Tj ET
+BT /F1 10 Tf 58 487 Td (3. Pilih DemoScan-BS100 di pengaturan Bluetooth perangkat kasir.) Tj ET
+BT /F1 8 Tf 50 30 Td (Halaman 1 dari 2. Contoh fiktif untuk latihan; bukan panduan produk nyata.) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 1357 >>
+stream
+0.5 w
+BT /F1 8 Tf 50 792 Td (DemoScan BS-100 | Pemindai barcode genggam | Panduan Pengguna v1.0) Tj ET
+50 773 m 545 773 l S
+BT /F2 13 Tf 50 745 Td (4. Mode pemindaian) Tj ET
+BT /F1 10 Tf 50 725 Td (Mode bawaan adalah HID \(keyboard\): hasil scan diketik ke kolom yang sedang aktif di) Tj ET
+BT /F1 10 Tf 50 710 Td (aplikasi. Pastikan kursor berada di kolom kode produk sebelum memindai.) Tj ET
+BT /F2 13 Tf 50 685 Td (5. Lampu dan bunyi) Tj ET
+50 659 200 20 re S
+BT /F2 9 Tf 55 665 Td (Tanda) Tj ET
+250 659 240 20 re S
+BT /F2 9 Tf 255 665 Td (Arti) Tj ET
+50 639 200 20 re S
+BT /F1 9 Tf 55 645 Td (Hijau berkedip + satu bip) Tj ET
+250 639 240 20 re S
+BT /F1 9 Tf 255 645 Td (Kode berhasil dibaca) Tj ET
+50 619 200 20 re S
+BT /F1 9 Tf 55 625 Td (Merah + tiga bip) Tj ET
+250 619 240 20 re S
+BT /F1 9 Tf 255 625 Td (Kode gagal dibaca) Tj ET
+50 599 200 20 re S
+BT /F1 9 Tf 55 605 Td (Biru berkedip) Tj ET
+250 599 240 20 re S
+BT /F1 9 Tf 255 605 Td (Mode pemasangan) Tj ET
+BT /F2 13 Tf 50 577 Td (6. Pemecahan masalah) Tj ET
+BT /F1 10 Tf 50 557 Td (Hasil scan muncul dua kali: aplikasi dan pemindai sama-sama menambahkan Enter. Matikan salah) Tj ET
+BT /F1 10 Tf 50 542 Td (satunya. Tidak membaca kode: bersihkan jendela pemindai dan jaga jarak 5-30 cm.) Tj ET
+BT /F1 8 Tf 50 30 Td (Halaman 2 dari 2. Contoh fiktif untuk latihan; bukan panduan produk nyata.) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000218 00000 n 
+0000000320 00000 n 
+0000000425 00000 n 
+0000002138 00000 n 
+0000002274 00000 n 
+0000003683 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R /Info 5 0 R >>
+startxref
+3819
+%%EOF

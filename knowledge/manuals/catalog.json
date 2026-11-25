@@ -1,0 +1,37 @@
+{
+  "note": "Fictional Step 05 catalog. Owner-maintained configuration; manuals are evidence, not instructions.",
+  "products": [
+    {
+      "id": "demoprint-tp58",
+      "name": "DemoPrint TP-58",
+      "category": "Printer struk thermal 58 mm",
+      "aliases": ["TP-58", "DemoPrint-TP58"],
+      "visual_features": "Compact black thermal receipt printer. Paper slot on top, round FEED button and blue LED on the front, white front label reading 'DemoPrint TP-58'. Same housing and front controls as TP-80, but narrower.",
+      "manual": "demoprint-tp58.pdf"
+    },
+    {
+      "id": "demoprint-tp80",
+      "name": "DemoPrint TP-80",
+      "category": "Printer struk thermal 80 mm",
+      "aliases": ["TP-80", "DemoPrint-TP80"],
+      "visual_features": "Wider black thermal receipt printer with an auto-cutter. Same housing and front controls as TP-58 (round FEED button, blue LED), plus a small OPEN button on top. White front label reading 'DemoPrint TP-80'.",
+      "manual": "demoprint-tp80.pdf"
+    },
+    {
+      "id": "demoscan-bs100",
+      "name": "DemoScan BS-100",
+      "category": "Pemindai barcode genggam",
+      "aliases": ["BS-100", "DemoScan-BS100"],
+      "visual_features": "Dark grey pistol-grip handheld barcode scanner with a green trigger and a red scan window. 'DemoScan' printed on the head and 'BS-100' on the handle.",
+      "manual": "demoscan-bs100.pdf"
+    },
+    {
+      "id": "democash-cd40",
+      "name": "DemoCash CD-40",
+      "category": "Laci kasir",
+      "aliases": ["CD-40"],
+      "visual_features": "Low dark steel cash drawer with a round key lock on the front and a front label reading 'DemoCash CD-40'.",
+      "manual": null
+    }
+  ]
+}

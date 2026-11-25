@@ -20,3 +20,16 @@ def knowledge_path() -> Path:
         return path
     local = ROOT / "knowledge" / "mock-saas.md"
     return local if local.is_file() else ROOT / "knowledge" / "mock-saas.example.md"
+
+
+def manuals_catalog_path() -> Path | None:
+    """Catalog in SAAS_MANUALS_DIR; unset uses the committed example, empty disables manuals."""
+    configured = os.environ.get("SAAS_MANUALS_DIR")
+    if configured is None:
+        return ROOT / "knowledge" / "manuals" / "catalog.json"
+    if not configured.strip():
+        return None
+    catalog = project_path(configured.strip()) / "catalog.json"
+    if not catalog.is_file():
+        raise FileNotFoundError("SAAS_MANUALS_DIR must contain catalog.json.")
+    return catalog

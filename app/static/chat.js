@@ -6,7 +6,15 @@ const clear = document.querySelector('#clear');
 const status = document.querySelector('#status');
 const error = document.querySelector('#error');
 const suggestions = document.querySelectorAll('[data-question]');
+const attach = document.querySelector('#attach');
+const photoInput = document.querySelector('#photo');
+const attachment = document.querySelector('#attachment');
+const attachmentName = document.querySelector('#attachment-name');
+const removePhoto = document.querySelector('#remove-photo');
+const DEFAULT_PHOTO_QUESTION = 'Produk apa ini dan bagaimana cara memulai memakainya?';
 let busy = false;
+let selectedPhoto = null;
+let uploadLimits = null;
 let idleStatus = 'Ready for a question';
 // Retain validated metadata for application logic; this is page-local, not model memory.
 const assistantResponses = [];
@@ -14,6 +22,43 @@ const conversationHistory = [];
 let conversationSummary = '';
 let memoryLimits = null;
 let productName = 'our product';
+
+// Images are not kept in memory. A short note lets follow-up questions keep the identified model.
+function photoNote(identification) {
+  if (!identification) return '[Foto terlampir]';
+  if (identification.status === 'identified') return `[Foto terlampir: dikenali sebagai ${identification.product_name}]`;
+  if (identification.status === 'ambiguous') return `[Foto terlampir: model belum pasti — ${identification.candidate_names.join(' atau ')}]`;
+  return '[Foto terlampir: produk tidak dikenali]';
+}
+
+function withPhotoNote(question, identification) {
+  const note = photoNote(identification);
+  const limit = (memoryLimits && memoryLimits.message_characters) || 4000;
+  return Array.from(question).slice(0, limit - Array.from(note).length - 1).join('') + '\n' + note;
+}
+
+function identificationText(identification) {
+  if (!identification) return '';
+  if (identification.status === 'identified') {
+    return `Photo check: looks like ${identification.product_name} (AI proposal; please confirm the model label).` +
+      (identification.manual_available ? '' : ' No manual is available for it.');
+  }
+  if (identification.status === 'ambiguous') return `Photo check: model unclear. Possible: ${identification.candidate_names.join(', ')}.`;
+  if (identification.status === 'unclear_image') return 'Photo check: the photo is too unclear to identify a product.';
+  return 'Photo check: no supported product recognized.';
+}
+
+function citationText(citation) {
+  const where = Number.isInteger(citation.page) ? `${citation.title}, p. ${citation.page}` : citation.section;
+  return `${where} (version ${citation.version.slice(0, 8)})`;
+}
+
+function showPhoto(file) {
+  selectedPhoto = file;
+  attachment.hidden = !file;
+  attachmentName.textContent = file ? `Photo: ${file.name}` : '';
+  if (!file) photoInput.value = '';
+}
 
 function rememberExchange(question, answer) {
   conversationHistory.push({ role: 'user', content: question }, { role: 'assistant', content: answer });
@@ -58,7 +103,7 @@ async function updateSummary() {
   conversationHistory.splice(0, removed);
 }
 
-function addMessage(role, text, response = null) {
+function addMessage(role, text, response = null, photoName = '') {
   const article = document.createElement('article');
   article.className = `message ${role}`;
   const speaker = document.createElement('p');
@@ -69,11 +114,22 @@ function addMessage(role, text, response = null) {
   // Treat both customer input and model output as text, never executable HTML.
   bubble.textContent = text;
   article.append(speaker, bubble);
+  if (photoName) {
+    const photo = document.createElement('p');
+    photo.className = 'photo-note';
+    photo.textContent = `Photo attached: ${photoName}`;
+    article.append(photo);
+  }
+  if (response && response.identification) {
+    const check = document.createElement('p');
+    check.className = 'photo-note';
+    check.textContent = identificationText(response.identification);
+    article.append(check);
+  }
   if (response && Array.isArray(response.citations) && response.citations.length) {
     const sources = document.createElement('p');
     sources.className = 'source-note';
-    sources.textContent = 'Sources: ' + response.citations.map(citation =>
-      `${citation.section} (version ${citation.version.slice(0, 8)})`).join('; ');
+    sources.textContent = 'Sources: ' + response.citations.map(citationText).join('; ');
     article.append(sources);
   }
   if (response) {
@@ -92,7 +148,7 @@ function addMessage(role, text, response = null) {
 
 function setBusy(value) {
   busy = value;
-  send.disabled = clear.disabled = input.disabled = value;
+  send.disabled = clear.disabled = input.disabled = attach.disabled = removePhoto.disabled = value;
   suggestions.forEach((button) => { button.disabled = value; });
   status.textContent = value ? 'Thinking…' : idleStatus;
 }
@@ -100,14 +156,16 @@ function setBusy(value) {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (busy) return;
-  const message = input.value.trim();
+  const photo = selectedPhoto;
+  const typed = input.value.trim();
+  const message = typed || (photo ? DEFAULT_PHOTO_QUESTION : '');
   if (!message) {
     input.setCustomValidity('Please type a message.');
     input.reportValidity();
     return;
   }
   error.hidden = true;
-  const userMessage = addMessage('user', message);
+  const userMessage = addMessage('user', message, null, photo ? photo.name : '');
   input.value = '';
   setBusy(true);
   try {
@@ -115,23 +173,29 @@ form.addEventListener('submit', async (event) => {
     if (!memoryLimits) await checkConfiguration();
     if (!memoryLimits) throw new Error('Cannot load conversation settings. Check the server and retry.');
     await updateSummary();
-    status.textContent = 'Thinking…';
-    const response = await fetch('/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, history: conversationHistory, summary: conversationSummary }),
-      signal: AbortSignal.timeout(45000),
-    });
+    status.textContent = photo ? 'Checking the photo…' : 'Thinking…';
+    const state = JSON.stringify({ message, history: conversationHistory, summary: conversationSummary });
+    let request = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: state, signal: AbortSignal.timeout(45000) };
+    if (photo) {
+      const form = new FormData();
+      form.append('payload', state);
+      form.append('image', photo, photo.name);
+      // The browser sets the multipart boundary header; identification + answer need extra time.
+      request = { method: 'POST', body: form, signal: AbortSignal.timeout(60000) };
+    }
+    const response = await fetch(photo ? '/chat/image' : '/chat', request);
     const data = await response.json();
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The request failed. Please try again.');
     if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('No reply was received. Please try again.');
     if (typeof data.intent !== 'string' || typeof data.requires_human !== 'boolean') throw new Error('The reply format was invalid. Please try again.');
     assistantResponses.push(data);
     addMessage('assistant', data.answer, data);
-    rememberExchange(message, data.answer);
+    rememberExchange(photo ? withPhotoNote(message, data.identification) : message, data.answer);
+    showPhoto(null);
   } catch (failure) {
+    // Keep both the draft and the selected photo so retry needs no re-selection.
     userMessage.remove();
-    input.value = message;
+    input.value = typed;
     error.textContent = failure.name === 'TimeoutError'
       ? 'The request timed out. Your message is ready to retry.'
       : failure instanceof TypeError || failure instanceof SyntaxError
@@ -152,6 +216,26 @@ input.addEventListener('keydown', (event) => {
   }
 });
 
+attach.addEventListener('click', () => photoInput.click());
+photoInput.addEventListener('change', () => {
+  const file = photoInput.files && photoInput.files[0];
+  if (!file) return;
+  error.hidden = true;
+  // Convenience checks only; the server validates the actual bytes.
+  if (uploadLimits && !uploadLimits.types.includes(file.type)) {
+    showPhoto(null);
+    error.textContent = 'Unsupported file type. Choose a PNG, JPEG, or WebP photo.';
+    error.hidden = false;
+  } else if (uploadLimits && file.size > uploadLimits.max_bytes) {
+    showPhoto(null);
+    error.textContent = `Photos must be ${Math.floor(uploadLimits.max_bytes / 1048576)} MB or smaller.`;
+    error.hidden = false;
+  } else {
+    showPhoto(file);
+  }
+});
+removePhoto.addEventListener('click', () => { showPhoto(null); input.focus(); });
+
 suggestions.forEach((button) => button.addEventListener('click', () => {
   input.value = button.dataset.question;
   input.setCustomValidity('');
@@ -163,6 +247,7 @@ clear.addEventListener('click', () => {
   conversationHistory.length = 0;
   conversationSummary = '';
   messages.replaceChildren();
+  showPhoto(null);
   addMessage('assistant', `Hi! I can help with ${productName}. What would you like to know?`);
   input.value = '';
   input.setCustomValidity('');
@@ -177,6 +262,8 @@ async function checkConfiguration() {
     const health = await response.json();
     memoryLimits = health.memory_limits;
     productName = health.product_name || 'our product';
+    uploadLimits = health.image_upload && health.image_upload.enabled ? health.image_upload : null;
+    attach.hidden = !uploadLimits;
     document.querySelector('.description').textContent = `Ask about ${productName}. Answers use the selected knowledge and show supporting sources.`;
     const welcome = document.querySelector('#welcome');
     if (welcome) welcome.textContent = `Hi! I can help with ${productName}. What would you like to know?`;
