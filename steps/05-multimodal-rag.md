@@ -153,3 +153,18 @@ Measured on the Step 04 worksheet, keyword mode, no model calls:
 - Section Recall@3 is 94.7% (18/19). The single miss, "Bagaimana membatasi Google Maps API Key?", now retrieves the Map Key PDF pages instead of the worksheet's expected `MapKey Mandiri` Markdown section. The PDF is the more detailed source, so this is a worksheet-label mismatch rather than worse evidence. Re-label the worksheet if the guides stay.
 
 `compare_retrieval` now passes the current question too, so benchmarks measure the same behavior as chat. Vector search still uses the combined text.
+
+**Screenshot trace and known gap (2026-11-27).** A Google Cloud "API key created" screenshot with "klo sdh tahap sini mesti ngapain kak?" ran end to end:
+
+| Stage | Result | Time |
+| --- | --- | --- |
+| Upload | PNG 1913×759 (99 KB) re-encoded to JPEG 1024×406 (53 KB), no EXIF | 25 ms |
+| Vision | `identified` / `jagel-map-key`; `visible_label` "…Credentials - API key created"; observation mentioned the Restrict key option | 3.0 s |
+| Retrieval | Map Key pp. 5, 1, 7 | |
+| Answer | `general`; correctly asked which stage the customer is at; no citations | 2.3 s |
+
+Identification, guide filtering and abstention all worked. But the vision model's on-screen detail (`visible_label`, `observation`) is used only for the conflict check and then discarded. So the search text lacked "Credentials/restrict", and the page with the next step (Application Restrictions, pp. 3–4) was not retrieved.
+
+Candidate improvement, not implemented: pass a short, validated on-screen hint into the search text and the identification note, labelled as untrusted data. Re-run this screenshot to compare.
+
+Where we stopped: Step 05 is complete. Next session starts Step 06 (read-only database tools).

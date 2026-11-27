@@ -218,7 +218,7 @@ Official references: [Fireworks OpenAI compatibility](https://docs.fireworks.ai/
 | 02 | [Structured instructions and outputs](steps/02-structured-instructions.md) | Implemented; mock knowledge and validated replies |
 | 03 | [First text RAG](steps/03-first-rag.md) | Implemented; fixture and custom knowledge verified |
 | 04 | [Improve retrieval](steps/04-better-retrieval.md) | Complete |
-| 05 | [Multimodal RAG](steps/05-multimodal-rag.md) | Complete; fictional manuals and photos verified live |
+| 05 | [Multimodal RAG](steps/05-multimodal-rag.md) | Complete; verified with fictional manuals and local Jagel guides (screenshots). Next: Step 06 |
 | 06 | [Read-only database tools](steps/06-database-tools.md) | Not started |
 | 07 | [Controlled tools and authorization](steps/07-tool-boundaries.md) | Not started |
 | 08 | [Combine RAG and tools](steps/08-rag-and-tools.md) | Not started |
