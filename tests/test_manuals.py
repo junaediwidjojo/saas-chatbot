@@ -208,7 +208,8 @@ def test_identification_outcomes(catalog):
     unsupported = photo_reply(validate_identification(identification('not_supported'), catalog), catalog)
     assert unsupported.intent == 'unknown' and unsupported.requires_human
     unclear = photo_reply(validate_identification(identification('unclear_image'), catalog), catalog)
-    assert unclear.intent == 'general' and 'foto ulang' in unclear.answer
+    assert unclear.intent == 'general' and 'screenshot' in unclear.answer
+    assert not any(word in reply.answer for word in ('label model', 'nomor model'))  # Works for screenshots too.
 
 
 def test_label_conflicting_with_proposal_becomes_ambiguous(catalog):
@@ -232,3 +233,30 @@ def test_label_conflicting_with_proposal_becomes_ambiguous(catalog):
 ])
 def test_invalid_identifications_are_rejected(catalog, text):
     assert validate_identification(text, catalog) is None
+
+
+def test_clear_new_question_is_not_outvoted_by_earlier_topic(config):
+    # Regression: two earlier manual questions full of rare words pushed "Paket Gold" out of the
+    # top passages, so the bot wrongly said it had no information.
+    from app.memory import ConversationMemory
+
+    class Request(ConversationMemory):
+        message: str
+
+    async def run():
+        await rag.ingest(config, ConstantEmbedder())
+        retriever = rag.Retriever(config, ConstantEmbedder())
+        old = ['Bagaimana pairing Bluetooth DemoPrint TP-58, PIN bawaan, tombol FEED dan POWER?',
+               'Lampu biru berkedip cepat di TP-58 dan kertas thermal 58 mm terbalik?']
+        history = [item for text in old for item in ({'role': 'user', 'content': text}, {'role': 'assistant', 'content': 'Baik.'})]
+        body = Request(message='Fitur Paket Gold apa saja?', history=history)
+        query = rag.retrieval_query(body)
+        without = await retriever.retrieve(query)
+        assert not any(chunk.section.endswith('Paket Gold') for chunk in without.chunks)  # The old failure.
+        fixed = await retriever.retrieve(query, focus=body.message)
+        assert any(chunk.section.endswith('Paket Gold') for chunk in fixed.chunks)
+        followup = Request(message='Kalau paket itu, formulir termasuk?',
+                           history=[{'role': 'user', 'content': 'Saya tertarik Paket Gold.'}, {'role': 'assistant', 'content': 'Baik.'}])
+        context = await retriever.retrieve(rag.retrieval_query(followup), focus=followup.message)
+        assert any(chunk.section.endswith('Paket Gold') for chunk in context.chunks)  # Vague follow-ups keep context.
+    asyncio.run(run())

@@ -65,22 +65,22 @@ def photo_reply(identification: ProductIdentification, catalog: Catalog) -> Phot
     if identification.status == "identified" and identification.manual_available:
         return None
     if identification.status == "identified":
-        answer = (f"Foto ini tampaknya {identification.product_name}. Panduan untuk produk ini belum tersedia, "
-                  "jadi saya tidak bisa memberi instruksi khusus model. Silakan hubungi dukungan manusia. "
+        answer = (f"Foto ini tampaknya menunjukkan {identification.product_name}. Panduannya belum tersedia, "
+                  "jadi saya belum bisa memberi langkah yang spesifik. Silakan hubungi dukungan manusia. "
                   "Belum ada tindakan yang dilakukan.")
         intent, human = "unknown", True
     elif identification.status == "ambiguous":
         options = " atau ".join(identification.candidate_names)
-        answer = (f"Saya belum bisa memastikan modelnya: kemungkinan {options}. Instruksinya berbeda antar model, "
-                  "jadi saya belum memberi langkah khusus. Kirim foto label model yang jelas, atau ketik nomor "
-                  "model yang tertulis di label.")
+        answer = (f"Saya belum bisa memastikan isi foto ini: kemungkinan {options}. Langkahnya berbeda untuk "
+                  "masing-masing, jadi saya belum memberi instruksi. Kirim foto atau screenshot yang lebih jelas "
+                  "(label, judul halaman, atau nama menu terlihat), atau ketik mana yang dimaksud.")
         intent, human = "general", False
     elif identification.status == "unclear_image":
-        answer = ("Fotonya kurang jelas untuk mengenali produk. Coba foto ulang di tempat terang dengan label "
-                  "model terlihat, atau ketik nomor modelnya.")
+        answer = ("Foto atau screenshot-nya kurang jelas untuk dikenali. Coba foto ulang atau ambil screenshot "
+                  "penuh dengan label, judul halaman, atau nama menu terlihat, atau ketik nama produk/fiturnya.")
         intent, human = "general", False
     else:
-        answer = (f"Saya tidak menemukan produk yang didukung di foto ini. Produk yang didukung: {names}. "
-                  "Jika ini perangkat lain, silakan hubungi dukungan manusia.")
+        answer = (f"Saya tidak menemukan produk atau fitur yang didukung di foto ini. Yang didukung saat ini: "
+                  f"{names}. Jika ini hal lain, silakan hubungi dukungan manusia.")
         intent, human = "unknown", True
     return PhotoChatResponse(intent=intent, answer=answer, requires_human=human, identification=identification)

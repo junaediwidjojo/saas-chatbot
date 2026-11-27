@@ -112,7 +112,7 @@ async def evaluate_case(operation):
                evidence_recall=0.0 if example['expected_sections'] else None, context_characters=0)
     try:
         async with asyncio.timeout(30):
-            ranked = await retriever.ranked_candidates(retrieval_query(body))
+            ranked = await retriever.ranked_candidates(retrieval_query(body), body.message)
             result = retriever.select(ranked)
             row['retrieval_ms'] = round((time.perf_counter() - started) * 1000, 2)
             sections = [retriever.chunks[cid].section for cid in ranked[:retriever.options.top_k]]

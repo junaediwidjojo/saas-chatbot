@@ -24,6 +24,8 @@ MIN_SIMILARITY = 0.30
 EMBEDDING_BATCH_SIZE = 16
 QUERY_CHARACTERS = 1600
 CHUNKER_VERSION = "markdown-sections-v1+pdf-pages-v1"
+# The current question's own keyword ranking outweighs the ranking that adds earlier user context.
+FOCUS_WEIGHT = 3
 
 
 class RagUnavailable(Exception):
@@ -288,12 +290,17 @@ class Retriever:
                 or manual_fingerprint(self.config.manuals) != self.manuals):
             raise RagUnavailable("Knowledge changed or is empty. Re-ingest knowledge and restart the server.")
 
-    async def rank(self, query: str) -> list[str]:
+    async def rank(self, query: str, focus: str | None = None) -> list[str]:
         self.check_freshness()
         query = query[:QUERY_CHARACTERS]
         if self.options.rewrite:
             query = await self.assistant.rewrite(query)
-        keyword = self.keywords.rank(query)[:self.options.candidates]
+        keyword = self.keywords.rank(query)
+        if focus and focus.strip() != query.strip():
+            # Earlier questions resolve vague follow-ups ("paket itu?") but must not outvote a clear
+            # new question: rare words from an old topic would otherwise dominate BM25.
+            keyword = fuse([self.keywords.rank(focus[:QUERY_CHARACTERS]), keyword], [FOCUS_WEIGHT, 1])
+        keyword = keyword[:self.options.candidates]
         if self.options.mode == "keyword":
             return keyword
         text = "Instruct: Given a SaaS support question, retrieve passages that answer it.\nQuery:" + query
@@ -326,14 +333,14 @@ class Retriever:
             include(cid)
         return RetrievalResult(selected)
 
-    async def ranked_candidates(self, query: str) -> list[str]:
-        ranked = await self.rank(query)
+    async def ranked_candidates(self, query: str, focus: str | None = None) -> list[str]:
+        ranked = await self.rank(query, focus)
         if self.options.rerank:
             return await self.assistant.rerank(query, [self.chunks[cid] for cid in ranked])
         return ranked
 
-    async def retrieve(self, query: str, product: str | None = None) -> RetrievalResult:
-        ranked = await self.ranked_candidates(query)
+    async def retrieve(self, query: str, product: str | None = None, focus: str | None = None) -> RetrievalResult:
+        ranked = await self.ranked_candidates(query, focus)
         if product:
             # A known model must never borrow another model's manual instructions.
             ranked = [cid for cid in ranked if self.chunks[cid].product in (None, product)]

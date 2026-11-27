@@ -131,7 +131,7 @@ Step 02 adds provider-enforced JSON schema output and strict Pydantic backend va
 
 ## Topic boundaries
 
-The active prompt is `support-v6`; earlier prompt versions are preserved for comparison. Greetings and SaaS support questions are allowed. Unrelated code, mathematics, poems, and trivia use `out_of_scope`. The backend discards the model's answer and returns a fixed Indonesian scope reminder with `requires_human=false` and `confidence=null`. This uses the existing single generation on the normal path; no separate classifier call is added.
+The active prompt is `support-v7`; earlier prompt versions are preserved for comparison. Greetings and SaaS support questions are allowed. Unrelated code, mathematics, poems, and trivia use `out_of_scope`. The backend discards the model's answer and returns a fixed Indonesian scope reminder with `requires_human=false` and `confidence=null`. This uses the existing single generation on the normal path; no separate classifier call is added.
 
 Mixed requests should answer only the product-related portion and decline the rest. Missing product facts still use `unknown` and recommend human support. Classification and mixed-answer compliance depend on the model; the fixed reply applies only when it selects `out_of_scope`. Restart the server to load the new prompt.
 
@@ -153,7 +153,7 @@ SAAS_KNOWLEDGE_FILE=knowledge/local/my-saas.md
 
 Relative paths resolve from the project root; absolute paths are also supported. An explicitly configured file must exist; a typo stops startup rather than silently loading the demo. Files elsewhere in the repository need their own ignore rules. Re-ingest and restart the server after changing the file or embedding settings. Knowledge is sent to your selected model provider, even though Git ignores the local file. Use `SAAS_NAME` for the displayed product name; set `SAAS_BRAND_FILE=prompts/local/brand.txt` for server-owned tone rules. The ignored `prompts/local/` directory keeps those custom rules local. Document facts belong in the knowledge file; communication rules should not be retrieved as evidence.
 
-Edit [prompts/support-v6.txt](prompts/support-v6.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
+Edit [prompts/support-v7.txt](prompts/support-v7.txt) to experiment with behavior rules; create a new version and update the loader when changing the prompt version. [steps/02-examples.json](steps/02-examples.json) contains illustrative responses to compare with live replies, not claims about actual model answers.
 
 ## Step 03: first text RAG
 
@@ -198,10 +198,10 @@ The seven frontend tests run the actual chat script with a simulated DOM and pro
 - `app/manuals.py` — product catalog validation, PDF page/table extraction, model-number mentions.
 - `app/uploads.py` — photo type/size/dimension checks and metadata-stripping re-encode.
 - `app/vision.py` — identification contract, catalog validation, and fixed uncertain-photo replies.
-- `prompts/identify-v1.txt` — photo identification rules.
+- `prompts/identify-v2.txt` — photo/screenshot identification rules.
 - `app/memory.py` — shared memory limits, validation, size heuristic, and selection of older exchanges.
 - `prompts/summarize-v1.txt` — summary update instructions.
-- `prompts/support-v6.txt` — versioned behavior rules (v6 adds manuals and photos).
+- `prompts/support-v7.txt` — versioned behavior rules (v6 added manuals and photos; v7 words them for screenshots too).
 - `knowledge/mock-saas.example.md` — committed fictional example; `knowledge/mock-saas.md` is your ignored local copy.
 - `app/static/index.html` — chat page structure.
 - `app/static/chat.js` — send, render, clear, and retry behavior.

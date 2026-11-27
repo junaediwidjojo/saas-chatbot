@@ -11,7 +11,7 @@ const photoInput = document.querySelector('#photo');
 const attachment = document.querySelector('#attachment');
 const attachmentName = document.querySelector('#attachment-name');
 const removePhoto = document.querySelector('#remove-photo');
-const DEFAULT_PHOTO_QUESTION = 'Produk apa ini dan bagaimana cara memulai memakainya?';
+const DEFAULT_PHOTO_QUESTION = 'Ini produk atau fitur apa, dan bagaimana cara memakainya?';
 let busy = false;
 let selectedPhoto = null;
 let uploadLimits = null;
@@ -27,8 +27,8 @@ let productName = 'our product';
 function photoNote(identification) {
   if (!identification) return '[Foto terlampir]';
   if (identification.status === 'identified') return `[Foto terlampir: dikenali sebagai ${identification.product_name}]`;
-  if (identification.status === 'ambiguous') return `[Foto terlampir: model belum pasti — ${identification.candidate_names.join(' atau ')}]`;
-  return '[Foto terlampir: produk tidak dikenali]';
+  if (identification.status === 'ambiguous') return `[Foto terlampir: belum pasti — ${identification.candidate_names.join(' atau ')}]`;
+  return '[Foto terlampir: tidak dikenali]';
 }
 
 function withPhotoNote(question, identification) {
@@ -40,12 +40,12 @@ function withPhotoNote(question, identification) {
 function identificationText(identification) {
   if (!identification) return '';
   if (identification.status === 'identified') {
-    return `Photo check: looks like ${identification.product_name} (AI proposal; please confirm the model label).` +
-      (identification.manual_available ? '' : ' No manual is available for it.');
+    return `Photo check: looks like ${identification.product_name} (AI guess; please check it matches what you see).` +
+      (identification.manual_available ? '' : ' No guide is available for it yet.');
   }
-  if (identification.status === 'ambiguous') return `Photo check: model unclear. Possible: ${identification.candidate_names.join(', ')}.`;
-  if (identification.status === 'unclear_image') return 'Photo check: the photo is too unclear to identify a product.';
-  return 'Photo check: no supported product recognized.';
+  if (identification.status === 'ambiguous') return `Photo check: not sure which one. Possible: ${identification.candidate_names.join(', ')}.`;
+  if (identification.status === 'unclear_image') return 'Photo check: the image is too unclear to identify.';
+  return 'Photo check: nothing supported was recognized.';
 }
 
 function citationText(citation) {
@@ -264,7 +264,9 @@ async function checkConfiguration() {
     productName = health.product_name || 'our product';
     uploadLimits = health.image_upload && health.image_upload.enabled ? health.image_upload : null;
     attach.hidden = !uploadLimits;
-    document.querySelector('.description').textContent = `Ask about ${productName}. Answers use the selected knowledge and show supporting sources.`;
+    document.querySelector('.description').textContent = `Ask about ${productName}` +
+      (uploadLimits ? ', or attach a photo or screenshot of what you need help with' : '') +
+      '. Answers use the selected knowledge and show supporting sources.';
     const welcome = document.querySelector('#welcome');
     if (welcome) welcome.textContent = `Hi! I can help with ${productName}. What would you like to know?`;
     idleStatus = health.configured ? 'Ready for a question' : 'Setup needed';

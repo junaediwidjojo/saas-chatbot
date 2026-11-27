@@ -203,8 +203,8 @@ test('photo-only sends use a default question; unsupported files are refused loc
   app.state.identification = { status: 'ambiguous', candidate_names: ['DemoPrint TP-58', 'DemoPrint TP-80'] };
   app.choosePhoto(new File(['x'], 'unclear.jpg', { type: 'image/jpeg' }));
   await app.send('');
-  assert.match(app.calls.at(-1).body.message, /Produk apa ini/);
-  assert.match(app.snapshot().history[0].content, /model belum pasti — DemoPrint TP-58 atau DemoPrint TP-80/);
+  assert.match(app.calls.at(-1).body.message, /produk atau fitur apa/);
+  assert.match(app.snapshot().history[0].content, /belum pasti — DemoPrint TP-58 atau DemoPrint TP-80/);
   app.choosePhoto(new File(['x'], 'again.jpg', { type: 'image/jpeg' }));
   app.clear();
   assert.equal(app.node('#attachment').hidden, true);

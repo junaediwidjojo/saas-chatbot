@@ -71,8 +71,8 @@ Text-only `/chat` also benefits. If the current question (or, failing that, rece
 - **Sample photos** — [steps/05-sample-images/](05-sample-images/) contains labelled TP-58, TP-80 and BS-100 photos, an unreadable printer label, the CD-40 (no manual), a coffee mug, and a TP-58 photo with a sticker trying to inject instructions.
 - **Index** — manual pages are indexed beside the Markdown knowledge in the same SQLite file, with the same keyword/vector/hybrid search. The chunker version became `markdown-sections-v1+pdf-pages-v1`. Index metadata stores SHA-256 hashes of the catalog and each PDF, so any edit requires re-ingestion.
 - **Uploads** — `app/uploads.py`. The file type comes from magic bytes; the client's file name and content type are ignored. Limits: 5 MB per file, 32 px minimum side, 40 MP maximum (checked before pixels are decoded). EXIF orientation is applied, and transparency is flattened. Re-encoding drops EXIF/GPS metadata and embedded text.
-- **Vision** — `app/vision.py` and [prompts/identify-v1.txt](../prompts/identify-v1.txt). The model defaults to the chat model (`deepseek-v4p1-flash`, which accepts images on Fireworks serverless). Override it with `FIREWORKS_VISION_MODEL` or `OPENAI_VISION_MODEL`. Both provider request shapes are implemented and tested: Chat Completions `image_url` and Responses `input_image`.
-- **Answer prompt** — [prompts/support-v6.txt](../prompts/support-v6.txt) adds rules for manual pages, ambiguous multi-model evidence and photo identification notes. v5 is preserved.
+- **Vision** — `app/vision.py` and [prompts/identify-v2.txt](../prompts/identify-v2.txt) (v2 also covers software screenshots). The model defaults to the chat model (`deepseek-v4p1-flash`, which accepts images on Fireworks serverless). Override it with `FIREWORKS_VISION_MODEL` or `OPENAI_VISION_MODEL`. Both provider request shapes are implemented and tested: Chat Completions `image_url` and Responses `input_image`.
+- **Answer prompt** — [prompts/support-v7.txt](../prompts/support-v7.txt). v6 added rules for manual pages, ambiguous multi-model evidence and photo identification notes; v7 words them so they fit app screenshots as well as devices. v5 and v6 are preserved. The fixed replies for ambiguous, unclear, unsupported and missing-guide photos also ask for a clearer photo or screenshot (label, page title or menu name) instead of a model label only.
 - **Time budget** — the photo route allows 45 seconds for both provider calls; the browser waits up to 60 seconds.
 
 New dependencies, as documented in `requirements.txt`:
@@ -131,3 +131,25 @@ Not verified: a manual click-through in a real browser (the UI was tested with t
 - **No OCR.** Scanned manuals without a text layer are rejected, and pages without text are skipped and reported. Complex layouts (multi-column pages, unruled tables) may extract in a poor order.
 - **No image search.** Retrieval uses text only (product name + question); image embeddings were not attempted. Photos are never stored, so the bot cannot re-inspect an earlier photo.
 - **Requests without a length.** The upload size guard requires `Content-Length`; requests without it get a 411.
+
+## After the build (2026-11-27)
+
+**Local Jagel guides.** `SAAS_MANUALS_DIR=knowledge/local/manuals` now points to two real Jagel PDFs (Map Key, 9 pages; Web Mode, 10 pages) with a local, git-ignored `catalog.json`. Each catalog item is a feature a screenshot can show, rather than a device. The fixed photo replies and prompts (`support-v7`, `identify-v2`) were reworded for screenshots: they ask for a label, page title or menu name instead of a model label only.
+
+**Follow-up retrieval fix.** Symptom: after questions about Map Key and Web Mode, "fitur paket gold?" was answered "belum menemukan informasi". Cause: the keyword search text combines the current question with the last two user questions. Rare words from the old topic ("Places", "Key", "Web Mode") outscored the short new question, so the Gold section was not retrieved. The bot then correctly abstained.
+
+The fix ranks the current question on its own and fuses that ranking with the context ranking, weighting the current question 3:1:
+
+```python
+keyword = self.keywords.rank(query)                      # question + earlier user questions
+if focus and focus.strip() != query.strip():
+    keyword = fuse([self.keywords.rank(focus), keyword], [FOCUS_WEIGHT, 1])   # FOCUS_WEIGHT = 3
+```
+
+Measured on the Step 04 worksheet, keyword mode, no model calls:
+
+- Both follow-up cases keep full recall ("paket itu" still resolves to Gold).
+- The reproduced Gold case and a mixed-history variant went from 0 to full recall. A weight of 2 still missed one of the follow-up cases.
+- Section Recall@3 is 94.7% (18/19). The single miss, "Bagaimana membatasi Google Maps API Key?", now retrieves the Map Key PDF pages instead of the worksheet's expected `MapKey Mandiri` Markdown section. The PDF is the more detailed source, so this is a worksheet-label mismatch rather than worse evidence. Re-label the worksheet if the guides stay.
+
+`compare_retrieval` now passes the current question too, so benchmarks measure the same behavior as chat. Vector search still uses the combined text.

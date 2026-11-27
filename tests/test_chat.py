@@ -23,7 +23,7 @@ TEST_CITATION = {"id":"test-source", "title":"Example", "section":"Example > Pro
 class FakeRetriever:
     calls = []
 
-    async def retrieve(self, query, product=None):
+    async def retrieve(self, query, product=None, focus=None):
         FakeRetriever.calls.append({"query": query, "product": product})
         return RetrievalResult([TEST_CHUNK])
 
@@ -132,7 +132,7 @@ def test_sdk_round_trip_and_single_turn_boundary(provider, isolate_configuration
     assert first["model"] == "test-model"
     assert format_config["schema"] == main.ASSISTANT_JSON_SCHEMA
     assert format_config["strict"] is True
-    assert "CloudDesk" in prompt and "Prompt version: support-v6" in prompt
+    assert "CloudDesk" in prompt and "Prompt version: support-v7" in prompt
 
 
 @pytest.mark.parametrize("payload", [
@@ -503,7 +503,7 @@ def test_missing_index_is_a_setup_error_not_full_document_fallback(provider, mon
 
 
 def test_empty_retrieval_cannot_support_a_factual_answer(provider, monkeypatch):
-    async def empty(self, query, product=None):
+    async def empty(self, query, product=None, focus=None):
         return RetrievalResult([])
     monkeypatch.setattr(FakeRetriever, 'retrieve', empty)
     provider['text'] = json.dumps({**VALID_REPLY, 'intent':'pricing', 'citation_ids':['test-source']})
@@ -515,7 +515,7 @@ def test_empty_retrieval_cannot_support_a_factual_answer(provider, monkeypatch):
 
 def test_no_full_knowledge_is_in_system_prompt():
     prompt = main.load_system_prompt()
-    assert 'support-v6' in prompt
+    assert 'support-v7' in prompt
     assert 'USD 29' not in prompt
     assert 'CSV exports' not in prompt
 
@@ -540,8 +540,8 @@ def post_photo(client, photo=SAMPLE_PHOTO, payload=None, name="printer.png"):
 
 @pytest.fixture
 def manual_retriever(monkeypatch):
-    async def retrieve(self, query, product=None):
-        FakeRetriever.calls.append({"query": query, "product": product})
+    async def retrieve(self, query, product=None, focus=None):
+        FakeRetriever.calls.append({"query": query, "product": product, "focus": focus})
         return RetrievalResult([MANUAL_CHUNK] if product == "demoprint-tp58" else [TEST_CHUNK])
     monkeypatch.setattr(FakeRetriever, "retrieve", retrieve)
 
@@ -570,7 +570,8 @@ def test_photo_identification_leads_to_page_cited_manual_answer(provider, isolat
     assert image.startswith("data:image/jpeg;base64,")  # Re-encoded, never the raw upload.
     assert sent_image(reply, isolate_configuration) == []  # The answer model sees text evidence only.
     assert "demoscan-bs100" in json.dumps(vision) and "Bagaimana pairing" not in json.dumps(vision)
-    assert FakeRetriever.calls == [{"query": "DemoPrint TP-58\nBagaimana pairing Bluetooth?", "product": "demoprint-tp58"}]
+    assert FakeRetriever.calls == [{"query": "DemoPrint TP-58\nBagaimana pairing Bluetooth?", "product": "demoprint-tp58",
+                                    "focus": "DemoPrint TP-58\nBagaimana pairing Bluetooth?"}]
     reply_messages = json.dumps(reply)
     assert "PRODUCT IDENTIFICATION" in reply_messages and "Halaman 2" in reply_messages
 

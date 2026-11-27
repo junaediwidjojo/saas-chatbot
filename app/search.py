@@ -66,9 +66,9 @@ class KeywordIndex:
         return sorted(scores, key=lambda cid: (-scores[cid], cid))
 
 
-def fuse(rankings):
+def fuse(rankings, weights=None):
     scores = {}
-    for ranking in rankings:
+    for ranking, weight in zip(rankings, weights or [1] * len(rankings)):
         for rank, cid in enumerate(ranking, start=1):
-            scores[cid] = scores.get(cid, 0) + 1 / (RRF_CONSTANT + rank)
+            scores[cid] = scores.get(cid, 0) + weight / (RRF_CONSTANT + rank)
     return sorted(scores, key=lambda cid: (-scores[cid], cid))
